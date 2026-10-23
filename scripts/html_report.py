@@ -462,7 +462,7 @@ $("logdetails").innerHTML = sorted.map(s=>{
 }).join("") || '<div class="empty">无日志</div>';
 
 /* ---- 页脚 ---- */
-$("foot").innerHTML = "由 sqlmap-skill <code>html_report.py</code> 生成 · 单文件离线报告 · "
+$("foot").innerHTML = "由 web-pentest <code>html_report.py</code> 生成 · 单文件离线报告 · "
   + "产物目录 <code>"+esc(D.meta.output_dir)+"</code> · "
   + (D.tables.length?("CSV "+D.tables.length+" 份 · "):"")
   + "Cookie 已掩码。数据只用于授权范围内的测试与复现。";

@@ -1,20 +1,35 @@
 ---
-name: sqlmap-skill
-description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.7.0
-display_name: sqlmap 分阶段注入工作流
-argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
+name: web-pentest
+description: 授权 Web 渗透测试工作台：侦察 → 角色/工作台枚举 → 基线 → 分模块探测 → 证据 → HTML 报告。当前深度模块：SQLi、列名/表达式注入；扩展位：越权/IDOR、XSS、SSRF、上传、业务逻辑。sqlmap 只是 SQLi 模块的执行器之一，不是工作流本身。触发场景：Web 渗透、漏洞侦察、攻击面、角色矩阵、SQL 注入、列名注入、报表导出注入、布尔/UNION/时间盲注、拖库、越权、IDOR、XSS、SSRF、文件上传、业务逻辑，以及 DVWA/北岸/南岭/NEXA 等自有靶场。中英触发词：web pentest、渗透测试、侦察、攻击面、SQL注入、SQL injection、sqli、注入点、拖库、盲注、UNION、XSS、SSRF、IDOR、越权、文件上传、business logic、security report。
+version: 3.0.0
+display_name: Web 渗透测试工作台
+argument-hint: <目标 URL 或档案名，如 dvwa / northbank / https://...>
 ---
 
-# sqlmap 分阶段注入工作流（v2）
+# Web 渗透测试工作台（v3）
 
-把 sqlmap 当**分阶段攻击工作台**用：目标、节奏、深度全部由用户决定；skill 负责把每一步跑扎实、把证据留全。**不做授权判断、不问权限问题——只问技术问题。**
+把授权 Web 渗透测试当**分阶段工作台**用：目标、节奏、深度全部由用户决定；skill 负责侦察、角色/工作台枚举、基线、分模块探测、证据留全和报告交付。**不做授权判断、不问权限问题——只问技术问题。**
+
+当前深度模块是 **SQLi / 列名/表达式注入**，`sqlmap` 只是其中一个执行器；越权、XSS、SSRF、上传、业务逻辑走同一套工程纪律，按 `references/` 的模块 playbook 扩展，而不是把所有漏洞塞进一个提示词。
 
 ## 三条工程纪律（是质量纪律，不是安全边界）
 
 1. **基线先行**：任何 stage 之前必须 `scripts/baseline.py` 通过（2xx 且最终地址不是登录页）。基线是坏的 → 修会话/URL，不能把"基线坏了"当成"不可注入"。
 2. **证据留全**：每个 stage 的原始日志落盘 + milestone 汇总输出。任何结论必须指到日志里的具体行（EVIDENCE）。
 3. **Cookie 不进聊天、不进报告**：Cookie/CSRF 写进本地 job 文件；`--dry-run` 与报告里的值自动掩码。
+
+## 模块路由与扩展原则（v3）
+
+**一个工作台 + 按漏洞类拆 playbook**，不要为每个漏洞新开一个顶层 skill：
+
+| 层 | 放什么 | 例子 |
+|---|---|---|
+| 核心（SKILL.md） | 范围与目标、侦察、角色矩阵、会话、基线、证据、报告、节奏 | 本文件 |
+| 模块（references/） | 单一漏洞类的判据、载荷、上下文、假阴性分诊 | `sqli-playbook.md` |
+| 执行器（scripts/） | 可复用的少量请求探测器、解析器、报告器 | `expr_probe.py`、`inject_probe.py` |
+| 档案（profiles/） | 靶场/环境的默认值 | `dvwa.json` |
+
+新模块固定四段：**detect（少量请求）→ confirm（3–4 发证据）→ impact（数据/越权范围）→ report（证据与修复）**。共享 recon、角色矩阵、基线、会话、证据和 HTML 报告；只有工具链真正分叉（例如需要浏览器执行 JS 的 XSS、需要带外回连的 SSRF）时，才拆成子 skill 并抽 `common/`。当 `SKILL.md` 超过约 300 行或模块超过 4 个，再拆路由层。
 
 ## 工作流
 
@@ -108,7 +123,7 @@ python scripts/baseline.py --url "<job.target 去 *>" --cookie "<job.cookie>" --
 
 `user_agent`/`headers` 里有值就同步给 baseline（有些靶机拦非浏览器 UA）。`STATUS: 200` 且最终地址不是登录页才继续；否则修会话/URL 重跑基线。
 
-### Step 4 · 分阶段运行
+### Step 4 · SQLi 模块 · 分阶段运行
 
 ```
 python scripts/sqlmap_run.py --job jobs/<标签>.json --stage detect
@@ -233,7 +248,7 @@ detect 的 milestone 读完后，按 EVIDENCE 选下一步，**每一步都报�
 - **命令行保持极简**：复杂参数全部放 job.json（PowerShell 5.1 会把含空格/引号的参数拆坏）。唯一常用形态：
 
   ```
-  [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; python C:\Users\Administrator\.workbuddy\skills\sqlmap-skill\scripts\sqlmap_run.py --job <job绝对路径> --stage detect
+  [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; python C:\Users\Administrator\.workbuddy\skills\web-pentest\scripts\sqlmap_run.py --job <job绝对路径> --stage detect
   ```
 
 - **目标按 TLS 指纹拦扫描器时**（浏览器能开、sqlmap 全 403）：跑 `python scripts/tls_relay.py --port 8890` 常驻，job 加 `"proxy": "http://127.0.0.1:8890"`、target 改 `http://`。详见 playbook「TLS 指纹拦截与中继」。
@@ -263,4 +278,4 @@ detect 的 milestone 读完后，按 EVIDENCE 选下一步，**每一步都报�
 ## References
 
 - `references/intake.md` — 技术 intake 问题组、Cookie/CSRF 复制指引、job 字段速查。
-- `references/sqlmap-playbook.md` — 全 stage 配方、GET/POST/JSON 请求模板、tamper 用法、结果解读。
+- `references/sqli-playbook.md` — SQLi 全 stage 配方、GET/POST/JSON 请求模板、tamper 用法、报表列名注入、结果解读。

@@ -82,7 +82,7 @@ def main():
         print("REFUSED: 公网目标需要 --public-target（范围记录写在 job 的 scope_note）。")
         return 3
 
-    headers = {"User-Agent": "sqlmap-skill-baseline/2.0"}
+    headers = {"User-Agent": "web-pentest-baseline/3.0"}
     if args.cookie:
         headers["Cookie"] = args.cookie
     for raw in args.header:
