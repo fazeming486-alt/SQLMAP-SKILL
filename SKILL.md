@@ -1,7 +1,7 @@
 ---
 name: sqlmap-skill
 description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.5.0
+version: 2.6.0
 display_name: sqlmap 分阶段注入工作流
 argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 ---
@@ -125,7 +125,25 @@ python scripts/sqlmap_run.py --job jobs/<标签>.json --stage tables
 
 `tamper` 是 job 级字段（如 `"space2comment,between"`），作用于所有 stage——DVWA medium 档常用 `space2comment`。`param` 定向只测一个参数（多参数 URL 省请求）；`request_file` 指向 Burp/ZAP 抓包文件（`-r` 模式，Cookie/UA/头/请求体全从文件读，复杂请求首选）。
 
-### Step 5 · 里程碑汇报
+### Step 4.5 · 成对布尔取证（inject_probe.py，证据级）
+
+sqlmap 判 not_injectable 之后，或目标**有限速**时，别再让 sqlmap 打（它一发就是上百请求，正是把限速打爆的元凶）。用取证器——**3 发请求出结论**：
+
+```
+python scripts/inject_probe.py --target "http://host/p?id=1*" --context numeric --base 1 --gap 30
+python scripts/inject_probe.py --target "http://host/login" --method POST \
+  --data "email=1*&password=x" --context quoted --gap 30
+python scripts/inject_probe.py --target "http://host/cart/update" --method POST \
+  --data "_csrf=TOKEN&product_id=113&qty[113*]=20" --context arraykey
+```
+
+- 上下文：`numeric`（数值 ` AND 1=1`）、`quoted`（引号串 `' AND '1'='1' -- `）、**`arraykey`（数组键名 `qty[113 AND 1=1]`，很多框架只校验值不校验键）**
+- 判定：**真值 ≡ 基线 且 假值 ≢ 基线 → INJECTABLE**；三者同态 → 不可注入（或有输入过滤）
+- 限速自适应：命中 429 / 422「过于频繁」/ 403「安全校验未通过」立即停手并报告已用请求数（限速是应用的正当防护，别硬刚）
+- 产物：`inject-evidence.json`（每发请求的 URL/载荷/状态/签名）+ `inject-raw/`（原始响应全文）——直接当报告里的证据
+- **改完工具先自检**：`python scripts/selftest.py`（自建靶点跑可注入/过滤/限速/403 四态，期望全 PASS）
+
+
 
 每个 stage 跑完，按运行器输出的格式汇报（不要改写成模糊叙述）：
 

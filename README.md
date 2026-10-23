@@ -1,6 +1,6 @@
 # SQLMAP-SKILL
 
-sqlmap 分阶段自动化注入的 agent skill（v2.5）。
+sqlmap 分阶段自动化注入的 agent skill（v2.6）。
 
 > v2.1 借鉴 [atiilla/sqlmap-ai](https://github.com/atiilla/sqlmap-ai)：`-p` 参数定向、`-r` 请求文件（Burp/ZAP 抓包直测）、WAF 指纹预检与 WAF→tamper 映射表、更细的结果解析（OS/Web 技术/受影响参数/连接错误分类）、detect 后自适应决策树。AI 决策由 agent 本体承担，不依赖外部 AI 服务。
 >
@@ -11,6 +11,8 @@ sqlmap 分阶段自动化注入的 agent skill（v2.5）。
 > v2.4 新增 **TLS 中继**（`tls_relay.py`）：目标按 TLS 客户端指纹拦扫描器时（浏览器能开、sqlmap 全 403），本地 Plain-HTTP→Clean-TLS 中继让 sqlmap 零指纹出门；中继自管会话 cookie，job 加 `proxy` 字段即用。
 >
 > v2.5 侦察升级（参考 reconftw/Claude-OSINT 等公开工程）：CT 日志子域枚举+活性探测、JS 密钥扫描（公知模式+值掩码）、技术栈指纹、目录发现（实测抓到纯爬取不可见的 /health 暴露点）。
+>
+> v2.6 新增 **成对取证器**（`inject_probe.py`）：基线/真值/假值三态对照，**3 发请求出结论**（sqlmap 一发就是上百请求，正是把应用限速打爆的元凶）。支持数值/引号串/**数组键名**三种上下文，限速自动识别并停手，输出证据 JSON + 原始响应。已用本地自建靶点做三态自检（可注入/不可注入/限速）全通过。
 
 ## 安装
 
