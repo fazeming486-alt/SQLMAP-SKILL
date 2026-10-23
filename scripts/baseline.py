@@ -3,11 +3,13 @@
 """Send one normal request to verify target/session before sqlmap.
 
 Usage:
-  python baseline.py --authorized \
+  python baseline.py \
     --url "http://127.0.0.1:9300/api/report/export?keyword=1&from=&to=" \
     --cookie "NB_SID=..." --header "X-CSRF-Token: ..."
 
-Exit codes: 0 2xx, 1 network error, 2 non-2xx.
+私网/回环目标自动放行；公网目标需要 --public-target（一行式记录由 job 的 scope_note 负责，不做问答）。
+
+Exit codes: 0 2xx, 1 network error, 2 non-2xx, 3 refused.
 """
 import argparse
 import ipaddress
@@ -16,6 +18,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from urllib.parse import urlparse
+
+if hasattr(sys.stdout, "reconfigure"):  # 固定 UTF-8，避免 GBK 控制台/管道乱码
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 def host_is_private(host):
@@ -43,18 +49,17 @@ def main():
     parser.add_argument("--preview", type=int, default=240)
     args = parser.parse_args()
 
-    if not args.authorized:
-        print("REFUSED: 需要 --authorized（只允许自有或书面授权的目标）。")
-        return 3
     if not args.url.startswith(("http://", "https://")):
         print("REFUSED: --url 必须是 http(s) 完整地址。")
         return 3
     host = urlparse(args.url).hostname
-    if not host_is_private(host) and not args.public_target:
-        print("REFUSED: 检测到公网目标。确认书面授权后加 --public-target。")
+    if host_is_private(host):
+        args.authorized = True  # 私网/回环/本地靶场：零声明直通
+    if not args.authorized and not args.public_target:
+        print("REFUSED: 公网目标需要 --public-target（范围记录写在 job 的 scope_note）。")
         return 3
 
-    headers = {"User-Agent": "sqlmap-skill-baseline/1.0"}
+    headers = {"User-Agent": "sqlmap-skill-baseline/2.0"}
     if args.cookie:
         headers["Cookie"] = args.cookie
     for raw in args.header:

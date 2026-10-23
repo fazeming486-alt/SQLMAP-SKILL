@@ -1,0 +1,29 @@
+{
+  "name": "northbank",
+  "display_name": "北岸商城靶场",
+  "targets": {
+    "base_url": "http://127.0.0.1:9300",
+    "entries": [
+      {
+        "label": "report-export",
+        "url": "http://127.0.0.1:9300/api/report/export?keyword=1*&from=&to=",
+        "method": "GET"
+      }
+    ]
+  },
+  "session": {
+    "mode": "manual",
+    "cookie_hint": "NB_SID",
+    "csrf_hint": "X-CSRF-Token",
+    "howto": "GET 接口只需 Cookie；POST/JSON 接口另加 X-CSRF-Token。值从浏览器 F12→网络→请求标头复制，写进本地 job 文件，不要贴进聊天。"
+  },
+  "dbms": "sqlite",
+  "defaults": {
+    "threads": 1,
+    "delay": 0,
+    "risk": 1,
+    "level": 3,
+    "time_sec": 5
+  },
+  "scope_note": "自有本地靶场 northbank，127.0.0.1:9300"
+}

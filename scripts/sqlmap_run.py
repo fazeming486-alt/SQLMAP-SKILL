@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Run one staged sqlmap job with guardrails. Stdlib only.
+"""Run one staged sqlmap job. Stdlib only.
 
 Usage:
   python sqlmap_run.py --job job.json --stage detect [--dry-run]
-  python sqlmap_run.py --job job.json --stage tables
-  python sqlmap_run.py --job job.json --stage columns
-  python sqlmap_run.py --job job.json --stage dump
 
-Exit codes: 0 success, 1 error, 2 not injectable, 3 refused by guardrail.
+Stages:
+  detect | dbs | current-db | tables | columns | dump | dump-all |
+  passwords | privileges | sql-query | os-cmd | file-read | file-write
+
+节奏/深度（threads、delay、risk、level、time_sec、tamper）全部来自 job，
+档案预填。私网/回环目标零声明直通；公网目标在 job 里写一行 scope_note（仅记录）。
+
+Exit codes: 0 success, 1 error, 2 not injectable / blocked, 3 refused.
 """
 import argparse
 import ipaddress
@@ -20,11 +24,21 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
-FORBIDDEN = (
-    "--os-shell", "--os-cmd", "--sql-shell", "--file-write", "--file-read",
-    "--udf-inject", "--eval", "--dump-all",
+if hasattr(sys.stdout, "reconfigure"):  # 固定 UTF-8，避免 GBK 控制台/管道乱码
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+STAGES = (
+    "detect", "dbs", "current-db", "tables", "columns", "dump", "dump-all",
+    "passwords", "privileges", "sql-query", "os-cmd", "file-read", "file-write",
 )
-STAGES = ("detect", "tables", "columns", "dump", "dbs", "current-db")
+
+VALUE_STAGE_FIELD = {
+    "sql-query": "query",
+    "os-cmd": "cmd",
+    "file-read": "file_read",
+    "file-write": "file_write",
+}
 
 
 def fail(message, code=3):
@@ -42,8 +56,8 @@ def find_sqlmap():
         candidates.append(which)
     home = os.path.expanduser("~")
     candidates += [
-        os.path.join(home, "Desktop", "sqlmap-GUI", "sqlmap", "sqlmap.py"),
         os.path.join(home, ".workbuddy", "tools", "sqlmap", "sqlmap.py"),
+        os.path.join(home, "Desktop", "sqlmap-GUI", "sqlmap", "sqlmap.py"),
         os.path.join(home, "sqlmap", "sqlmap.py"),
     ]
     for path in candidates:
@@ -99,19 +113,16 @@ def load_job(path):
         fail("job 不是合法的 JSON（已尝试 UTF-8 / UTF-8-SIG / GBK）")
     if not isinstance(job, dict):
         fail("job 必须是 JSON 对象")
-    if job.get("authorized") is not True:
-        fail("authorized 必须为 true。只允许自有或书面授权的目标。")
-    note = str(job.get("authorization_note") or "").strip()
-    if len(note) < 8:
-        fail("请在 authorization_note 里写清楚授权来源/范围（至少 8 个字符）。")
     target = str(job.get("target") or "").strip()
     if not target.startswith(("http://", "https://")):
         fail("target 必须是 http(s) 完整地址")
     if "*" not in target:
         fail("target 里必须用 * 标出注入点，例如 ...?keyword=1*&from=&to=")
     parsed = urlparse(target)
-    if not host_is_private(parsed.hostname) and job.get("public_target") is not True:
-        fail("检测到公网目标。确认你有书面授权后，在 job 里加 \"public_target\": true。")
+    if not host_is_private(parsed.hostname):
+        note = str(job.get("scope_note") or "").strip()
+        if len(note) < 8:
+            fail("公网目标：在 job 里写一行 scope_note（如 \"客户授权测试，范围 staging.example.com，10-20 至 10-25\"）。仅作记录，不阻断。")
     return job
 
 
@@ -120,48 +131,63 @@ def validate(job, stage):
         fail("stage 只能是：%s" % ", ".join(STAGES))
     level = int(job.get("level", 1) or 1)
     risk = int(job.get("risk", 1) or 1)
-    delay = float(job.get("delay", 1) or 0)
+    delay = float(job.get("delay", 0) or 0)
     time_sec = int(job.get("time_sec", 5) or 5)
-    if not 1 <= level <= 3:
-        fail("level 只允许 1–3（更高会发更多请求，先和用户确认）")
-    if not 1 <= risk <= 2:
-        fail("risk 只允许 1–2（3 会含改数据类语句，本 skill 禁用）")
+    threads = int(job.get("threads", 1) or 1)
+    if not 1 <= level <= 5:
+        fail("level 只允许 1–5")
+    if not 1 <= risk <= 3:
+        fail("risk 只允许 1–3（3 含 OR 类改数语句，共享库慎用）")
     if not 0 <= delay <= 10:
         fail("delay 必须在 0–10 秒之间")
     if not 3 <= time_sec <= 10:
         fail("time_sec 必须在 3–10 秒之间")
+    if not 1 <= threads <= 10:
+        fail("threads 只允许 1–10")
+    tamper = str(job.get("tamper") or "").strip()
+    if tamper and not re.fullmatch(r"[A-Za-z0-9_,]+", tamper):
+        fail("tamper 只能是逗号分隔的脚本名（字母/数字/下划线）")
     if stage in ("columns", "dump"):
         table = str(job.get("table") or "").strip()
-        if not re.fullmatch(r"[A-Za-z0-9_]+", table):
-            fail("stage=%s 需要合法的 table 名（字母/数字/下划线）" % stage)
+        if not re.fullmatch(r"[A-Za-z0-9_\.]+", table):
+            fail("stage=%s 需要合法的 table 名（字母/数字/下划线/点）" % stage)
         if stage == "dump":
             columns = job.get("columns") or []
             if isinstance(columns, str):
                 columns = [c.strip() for c in columns.split(",") if c.strip()]
-            if not columns and job.get("allow_full_table") is not True:
-                fail("dump 请指定 columns（推荐），全表需要 allow_full_table=true 并再次确认影响")
             for col in columns:
-                if not re.fullmatch(r"[A-Za-z0-9_]+", str(col)):
-                    fail("列名只能包含字母/数字/下划线：%s" % col)
+                if not re.fullmatch(r"[A-Za-z0-9_\.]+", str(col)):
+                    fail("列名只能包含字母/数字/下划线/点：%s" % col)
     where = str(job.get("where") or "")
     if ";" in where:
         fail("where 里不允许分号")
     technique = str(job.get("technique") or "").upper()
     if technique and not re.fullmatch(r"[BEUST]+", technique):
         fail("technique 只能是 B/E/U/S/T 的组合")
-    return level, risk, delay, time_sec
+    if stage in ("sql-query", "os-cmd", "file-read", "file-write"):
+        field = VALUE_STAGE_FIELD[stage]
+        value = str(job.get(field) or "").strip()
+        if not value:
+            fail("stage=%s 需要 job 字段 %s" % (stage, field))
+        if stage == "file-write":
+            dest = str(job.get("file_dest") or "").strip()
+            if not dest:
+                fail("stage=file-write 还需要 file_dest（目标机上的写入路径）")
+            if not os.path.isfile(value):
+                fail("file_write 本地源文件不存在：%s" % value)
+    return level, risk, delay, time_sec, threads, tamper
 
 
-def build_command(job, stage, level, risk, delay, time_sec):
+def build_command(job, stage, level, risk, delay, time_sec, threads, tamper):
     base = find_sqlmap()
     if not base:
-        fail("找不到 sqlmap。设置 SQLMAP_PATH，或把 sqlmap.py 放到 ~/Desktop/sqlmap-GUI/sqlmap/。", 1)
+        fail("找不到 sqlmap。设置 SQLMAP_PATH，或把 sqlmap 装到 ~/.workbuddy/tools/sqlmap/。", 1)
     out_dir = os.path.abspath(str(job.get("output_dir") or os.path.join("runs", "sqlmap-job")))
     os.makedirs(out_dir, exist_ok=True)
     cmd = base + [
         "-u", str(job["target"]),
         "--batch",
-        "--threads", "1",
+        "--threads", str(threads),
         "--level", str(level),
         "--risk", str(risk),
         "--time-sec", str(time_sec),
@@ -169,8 +195,12 @@ def build_command(job, stage, level, risk, delay, time_sec):
     ]
     if delay > 0:
         cmd += ["--delay", str(delay)]
+    if tamper:
+        cmd += ["--tamper=" + tamper]
     if job.get("cookie"):
         cmd += ["--cookie", str(job["cookie"])]
+    if job.get("user_agent"):
+        cmd += ["--user-agent=" + str(job["user_agent"])]
     headers = [str(h) for h in (job.get("headers") or []) if str(h).strip()]
     if headers:
         cmd += ["--headers", "\n".join(headers)]
@@ -188,8 +218,13 @@ def build_command(job, stage, level, risk, delay, time_sec):
         cmd += ["--union-cols", str(int(job["union_cols"]))]
     if job.get("union_char"):
         cmd += ["--union-char", str(job["union_char"])]
+    where = str(job.get("where") or "").strip()
     if stage == "detect":
         cmd += ["--flush-session"]
+    elif stage == "dbs":
+        cmd += ["--dbs"]
+    elif stage == "current-db":
+        cmd += ["--current-db"]
     elif stage == "tables":
         cmd += ["--tables"]
     elif stage == "columns":
@@ -201,17 +236,24 @@ def build_command(job, stage, level, risk, delay, time_sec):
             columns = [c.strip() for c in columns.split(",") if c.strip()]
         if columns:
             cmd += ["-C", ",".join(str(c) for c in columns)]
-        if job.get("where"):
-            cmd += ["--where", str(job["where"])]
+        if where:
+            cmd += ["--where", where]
         cmd += ["--dump"]
-    elif stage == "dbs":
-        cmd += ["--dbs"]
-    elif stage == "current-db":
-        cmd += ["--current-db"]
-    lowered = " ".join(cmd).lower()
-    for bad in FORBIDDEN:
-        if bad in lowered:
-            fail("命令里出现禁用选项：%s" % bad)
+    elif stage == "dump-all":
+        cmd += ["--dump-all"]
+    elif stage == "passwords":
+        cmd += ["--passwords"]
+    elif stage == "privileges":
+        cmd += ["--privileges"]
+    elif stage == "sql-query":
+        cmd += ["--sql-query=" + str(job["query"])]
+    elif stage == "os-cmd":
+        cmd += ["--os-cmd=" + str(job["cmd"])]
+    elif stage == "file-read":
+        cmd += ["--file-read=" + str(job["file_read"])]
+    elif stage == "file-write":
+        cmd += ["--file-write=" + str(job["file_write"]),
+                "--file-dest=" + str(job["file_dest"])]
     return cmd, out_dir
 
 
@@ -225,8 +267,10 @@ def summarize(out, stage):
         "artifacts": [],
         "blocked": False,
         "errors": [],
+        "tail": [],
     }
-    for line in out.splitlines():
+    lines = out.splitlines()
+    for line in lines:
         low = line.lower()
         if "is vulnerable" in low or ("appears to be" in low and "injectable" in low):
             info["injectable"] = True
@@ -245,10 +289,10 @@ def summarize(out, stage):
         m = re.search(r"fetched data logged to text files under '([^']+)'", line)
         if m:
             info["artifacts"].append(m.group(1))
-        if stage == "tables":
-            m = re.search(r"retrieved: '([^']+)'", line)
+        if "retrieved: " in line:
+            m = re.search(r"retrieved: '?([^'\r\n]+)'?", line)
             if m:
-                info["tables"].append(m.group(1))
+                info["tables"].append(m.group(1).strip())
         if ("Type:" in line or "Title:" in line or "Payload:" in line) and line.strip() not in info["types"]:
             info["types"].append(line.strip())
         if "[ERROR]" in line or "[CRITICAL]" in line:
@@ -258,6 +302,9 @@ def summarize(out, stage):
     info["artifacts"] = list(dict.fromkeys(info["artifacts"]))
     blocked = len(re.findall(r"403 \(Forbidden\)", out)) + len(re.findall(r"429 \(Too Many Requests\)", out))
     info["blocked"] = blocked >= 3
+    if stage in ("sql-query", "os-cmd", "file-read", "file-write", "passwords", "privileges"):
+        tail = [l for l in lines if l.strip()]
+        info["tail"] = tail[-14:]
     return info
 
 
@@ -283,7 +330,11 @@ def print_milestone(stage, info, artifact_dir, log_path, exit_code):
     if info["columns"]:
         print("QUERY_COLUMNS: %d" % info["columns"])
     if info["tables"]:
-        print("TABLES (%d): %s" % (len(info["tables"]), ", ".join(info["tables"])))
+        print("RETRIEVED (%d): %s" % (len(info["tables"]), ", ".join(info["tables"][:30])))
+    if info["tail"]:
+        print("RESULT_TAIL:")
+        for line in info["tail"]:
+            print("  " + line)
     if info["artifacts"]:
         print("ARTIFACTS:")
         for path in info["artifacts"][:6]:
@@ -298,7 +349,7 @@ def print_milestone(stage, info, artifact_dir, log_path, exit_code):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Staged sqlmap runner with guardrails")
+    parser = argparse.ArgumentParser(description="Staged sqlmap runner")
     parser.add_argument("--job", required=True)
     parser.add_argument("--stage", choices=STAGES, default=None)
     parser.add_argument("--dry-run", action="store_true")
@@ -306,8 +357,8 @@ def main():
 
     job = load_job(args.job)
     stage = args.stage or str(job.get("stage") or "detect")
-    level, risk, delay, time_sec = validate(job, stage)
-    cmd, out_dir = build_command(job, stage, level, risk, delay, time_sec)
+    level, risk, delay, time_sec, threads, tamper = validate(job, stage)
+    cmd, out_dir = build_command(job, stage, level, risk, delay, time_sec, threads, tamper)
     shown = redact(" ".join(cmd), job.get("cookie"), job.get("headers") or [])
     print("COMMAND (redacted):")
     print("  " + shown)

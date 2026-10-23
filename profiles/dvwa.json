@@ -1,0 +1,52 @@
+{
+  "name": "dvwa",
+  "display_name": "DVWA 靶场",
+  "targets": {
+    "base_url": "http://192.168.0.103:8080",
+    "entries": [
+      {
+        "label": "sqli-low",
+        "url": "http://192.168.0.103:8080/vulnerabilities/sqli/?id=1*&Submit=Submit",
+        "method": "GET",
+        "security": "low"
+      },
+      {
+        "label": "sqli-medium",
+        "url": "http://192.168.0.103:8080/vulnerabilities/sqli/",
+        "method": "POST",
+        "data": "id=1*&Submit=Submit",
+        "security": "medium",
+        "tamper": "space2comment"
+      },
+      {
+        "label": "sqli_blind-low",
+        "url": "http://192.168.0.103:8080/vulnerabilities/sqli_blind/?id=1*&Submit=Submit",
+        "method": "GET",
+        "security": "low"
+      },
+      {
+        "label": "sqli_blind-medium",
+        "url": "http://192.168.0.103:8080/vulnerabilities/sqli_blind/",
+        "method": "POST",
+        "data": "id=1*&Submit=Submit",
+        "security": "medium",
+        "tamper": "space2comment"
+      }
+    ]
+  },
+  "session": {
+    "mode": "script",
+    "script": "scripts/dvwa_session.py",
+    "args": ["--base-url", "http://192.168.0.103:8080", "--user", "admin", "--pass", "password"]
+  },
+  "dbms": "mysql",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+  "defaults": {
+    "threads": 4,
+    "delay": 0,
+    "risk": 1,
+    "level": 3,
+    "time_sec": 5
+  },
+  "scope_note": "自有 DVWA 靶场 192.168.0.103，仅限本机局域网"
+}

