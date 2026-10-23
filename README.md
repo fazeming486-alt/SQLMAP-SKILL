@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.0）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.0.1）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -94,6 +94,8 @@ python scripts/report.py --run-dir runs/demo
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.0.1**：登录失败不中断角色矩阵；修正 httpx 同名二进制识别。
 >
 > **v4.0 工作台化**：新增 `httpkit` / `findings` / `engage` / `report` 内核；新增配置面、XSS、越权/IDOR、SSRF、上传面模块；外部工具适配；统一预算/限速/证据/报告；SKILL.md 改为路由层，细节拆 references。
 
