@@ -107,7 +107,11 @@ baseline 的 `WAF_DETECTED/WAF_TYPE`（签名预检）与 sqlmap 的 `WAF:` 输�
 `scripts/recon.py` 是 detect 之前的侦察步——只浏览不攻击，产出候选注入点：
 
 - **被动层**（默认）：BFS 爬同站链接、解析 `<form>`（action/method/字段）、robots.txt、sitemap.xml、JS 文件里的端点字符串（LinkFinder 式正则）。公网目标需一行 `--scope-note`。
-- **主动层**（`--probe`，可选）：对无参 GET 端点逐个试参数名（Arjun 式，内置 ~100 常用名，可 `--wordlist` 换大词表），状态码/长度差/反射三信号判活。请求量 = 词表 × 端点数，公网先用被动层。
+- **密钥扫描**（默认开）：页面 + 内联 JS + 外链 JS，公知模式（AWS/Google/GitHub/Slack/Stripe/Twilio/SendGrid/npm/JWT/私钥/通用赋值），命中值**掩码**展示（前 6 后 2）。
+- **技术栈指纹**（默认开）：Server/X-Powered-By/Set-Cookie/页面特征（nginx/PHP/Laravel/Django/Next.js/WordPress/CF…）。
+- **目录发现**（`--dirs`）：~45 个高频暴露路径，200/401/403 且标题可疑的打 ★；实测能抓到纯爬取不可见的 `/health`、`/admin`。
+- **CT 子域**（`--subdomains`）：crt.sh 证书透明日志枚举可注册域下的子域 → DNS 解析 → HTTP 活性探测（status+标题）。**只探测授权范围内的主机**；可注册域提取是启发式（gov.cn 类后缀特判）。
+- **参数探测**（`--probe`）：对无参 GET 端点逐个试参数名（Arjun 式，内置 ~100 常用名，可 `--wordlist` 换大词表），状态码/长度差/反射三信号判活。请求量 = 词表 × 端点数，公网先用被动层。
 - 输出 `candidates.json` + 排行：score = 有参数(+3)/表单(+2)/API 路径(+2)/2xx(+1)/需登录(-1)，每条带 `suggest`（可直接粘进 job 的带 `*` 目标串）。
 - **选点判据**：优先 `q`/`category`/`id` 这类直接进 SQL 的检索型参数；带 `_csrf` 的 POST 表单要先处理 CSRF；标"⚠需登录"的要先补会话。
 
