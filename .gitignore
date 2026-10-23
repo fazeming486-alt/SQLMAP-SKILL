@@ -1,0 +1,7 @@
+runs/
+jobs/
+*.log
+*.csv
+__pycache__/
+*.pyc
+.venv/
