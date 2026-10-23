@@ -1,6 +1,6 @@
 # SQLMAP-SKILL
 
-sqlmap 分阶段自动化注入的 agent skill（v2.6）。
+sqlmap 分阶段自动化注入的 agent skill（v2.7）。
 
 > v2.1 借鉴 [atiilla/sqlmap-ai](https://github.com/atiilla/sqlmap-ai)：`-p` 参数定向、`-r` 请求文件（Burp/ZAP 抓包直测）、WAF 指纹预检与 WAF→tamper 映射表、更细的结果解析（OS/Web 技术/受影响参数/连接错误分类）、detect 后自适应决策树。AI 决策由 agent 本体承担，不依赖外部 AI 服务。
 >
@@ -13,6 +13,8 @@ sqlmap 分阶段自动化注入的 agent skill（v2.6）。
 > v2.5 侦察升级（参考 reconftw/Claude-OSINT 等公开工程）：CT 日志子域枚举+活性探测、JS 密钥扫描（公知模式+值掩码）、技术栈指纹、目录发现（实测抓到纯爬取不可见的 /health 暴露点）。
 >
 > v2.6 新增 **成对取证器**（`inject_probe.py`）：基线/真值/假值三态对照，**3 发请求出结论**（sqlmap 一发就是上百请求，正是把应用限速打爆的元凶）。支持数值/引号串/**数组键名**三种上下文，限速自动识别并停手，输出证据 JSON + 原始响应。已用本地自建靶点做三态自检（可注入/不可注入/限速）全通过。
+>
+> v2.7 新增 **表达式/列名注入取证**（`expr_probe.py`）：报表导出、统计接口常把 `dimension` 一类参数当列名直接拼 SQL，引号全 500、sqlmap 判 not injectable；本脚本用 `(SELECT '标记')` / `(SELECT 1)` 4 发确认，并支持 cookie jar 跟随会话轮换。NEXA 实战从买家侧“全线参数化”转到商家 `/merchant/reports/export?dimension=`，一次命中 MariaDB，取出 `ops_audit_notes.audit_token`。同时补了“三工作台枚举（buyer/merchant/admin）”和 Cloudflare 530/会话轮换的分诊。
 
 ## 安装
 
@@ -27,6 +29,7 @@ sqlmap 分阶段自动化注入的 agent skill（v2.6）。
 ## v2 能力
 
 - **自动找注入点**（v2.3 `scripts/recon.py`）：被动爬取（链接/表单/robots/sitemap/JS 端点）+ 可选 Arjun 式参数探测，输出带 `*` 标记的候选注入点排行，直接组装 job——只给入口 URL 也能全自动开打。
+- **报表列名注入**（v2.7 `scripts/expr_probe.py`）：针对导出/统计接口的 `dimension`、`order_by` 一类列名参数，4 发确认表达式注入，支持 `(SELECT ...)` 取数、cookie jar 会话轮换、登录页误判保护。
 - **靶场档案**（`profiles/`）：DVWA、北岸商城预置；命中档案零问答直通，节奏/注入点/会话方式全部预填。
 - **自动会话**：`scripts/dvwa_session.py` 自动登录取 token → 登录 → 切安全档位 → 输出 sqlmap 可用 Cookie（`--json`）。
 - **全能力 stage**：detect / dbs / current-db / tables / columns / dump / dump-all / passwords / privileges / sql-query / os-cmd / file-read / file-write。交互式 shell 与 `--batch` 不兼容，用单发 `--os-cmd` / `--sql-query` 替代。
