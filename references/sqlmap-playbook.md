@@ -30,6 +30,22 @@
 -u "http://host/path?keyword=1*&from=&to=" --cookie "NB_SID=..."
 ```
 
+### 参数定向（多参数 URL 只测关心的那个）
+
+```
+-p "id"
+```
+
+job 里写 `"param": "id"`。多参数 URL 不定向时 sqlmap 会把每个参数都测一遍——慢且浪费请求。
+
+### Burp/ZAP 请求文件（复杂请求首选）
+
+```
+-r request.txt
+```
+
+job 里写 `"request_file": "request.txt"`（`*` 直接标在文件里的参数值上）。Cookie、UA、自定义头、请求体全部从文件读，job 不用重复给。适用：POST/JSON、自定义头、需要精确重放的场景。抓包：Burp 右键 → Copy to file / Save item。
+
 ### POST 表单
 
 ```
@@ -65,6 +81,24 @@ X-CSRF-Token: <token>" \
 - `--string "<标记>"`：布尔盲注时"真"响应独有的标记。
 - `--tamper a,b,c`：payload 变形脚本串。DVWA medium 常用 `space2comment`；`between` 替换比较符；组合用逗号。tamper 是 job 级字段，作用于所有 stage。
 - `--output-dir`：产物根；CSV 落 `<out>/<host>/dump/<db>/`。
+
+## WAF→tamper 映射（参考表）
+
+来源：sqlmap 本体 `--identify-waf` 的识别结果 + 社区经验（sqlmap-ai evasion_engine 同源）。**一次别超过 3–5 个脚本**，先单独试通用款（`space2comment` / `charencode`），组合太多反而假阴性。
+
+| WAF（`WAF: xxx` 输出） | 建议 tamper（按顺序试） |
+|---|---|
+| 未识别但提示有 WAF | `space2comment` → `charencode` → `between,randomcase` |
+| cloudflare | `charencode` → `charunicodeencode` → `between,randomcase` |
+| modsecurity | `charencode` → `charunicodeencode` → `space2comment,randomcase` |
+| imperva/incapsula | `charencode` → `equaltolike,greatest` → `randomcase,between` |
+| aws-waf | `between` → `charencode,randomcase` → `space2plus` |
+| f5/big-ip | `charencode` → `equaltolike,greatest` → `space2comment` |
+| fortinet | `between` → `charencode,randomcase` → `space2comment` |
+| akamai | `charencode` → `randomcase,between` → `base64encode` |
+| **DVWA 靶机的 403** | **不是 WAF，是 UA 规则**——别上 tamper，job 加浏览器 `user_agent` 即可 |
+
+baseline 的 `WAF_DETECTED/WAF_TYPE`（签名预检）与 sqlmap 的 `WAF:` 输出（`--identify-waf` 级）都看一眼再定 tamper。
 
 ## 结果解读
 

@@ -1,6 +1,8 @@
 # SQLMAP-SKILL
 
-sqlmap 分阶段自动化注入的 agent skill（v2）。
+sqlmap 分阶段自动化注入的 agent skill（v2.1）。
+
+> v2.1 借鉴 [atiilla/sqlmap-ai](https://github.com/atiilla/sqlmap-ai)：`-p` 参数定向、`-r` 请求文件（Burp/ZAP 抓包直测）、WAF 指纹预检与 WAF→tamper 映射表、更细的结果解析（OS/Web 技术/受影响参数/连接错误分类）、detect 后自适应决策树。AI 决策由 agent 本体承担，不依赖外部 AI 服务。
 
 ## 安装
 

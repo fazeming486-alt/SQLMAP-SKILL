@@ -8,7 +8,8 @@
         "label": "sqli-low",
         "url": "http://192.168.0.103:8080/vulnerabilities/sqli/?id=1*&Submit=Submit",
         "method": "GET",
-        "security": "low"
+        "security": "low",
+        "param": "id"
       },
       {
         "label": "sqli-medium",
@@ -16,13 +17,15 @@
         "method": "POST",
         "data": "id=1*&Submit=Submit",
         "security": "medium",
-        "tamper": "space2comment"
+        "tamper": "space2comment",
+        "param": "id"
       },
       {
         "label": "sqli_blind-low",
         "url": "http://192.168.0.103:8080/vulnerabilities/sqli_blind/?id=1*&Submit=Submit",
         "method": "GET",
-        "security": "low"
+        "security": "low",
+        "param": "id"
       },
       {
         "label": "sqli_blind-medium",
@@ -30,7 +33,8 @@
         "method": "POST",
         "data": "id=1*&Submit=Submit",
         "security": "medium",
-        "tamper": "space2comment"
+        "tamper": "space2comment",
+        "param": "id"
       }
     ]
   },

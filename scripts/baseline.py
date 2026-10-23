@@ -36,6 +36,29 @@ def host_is_private(host):
         return host.endswith(".local") or host.endswith(".localhost")
 
 
+# WAF 指纹签名（借自 atiilla/sqlmap-ai 的 evasion_engine，精简为 stdlib 可判的串）
+WAF_SIGNATURES = {
+    "cloudflare": ["cf-ray", "__cfduid", "cloudflare", "attention required"],
+    "aws-waf": ["x-amzn-requestid", "blocked by aws waf", "awselb"],
+    "modsecurity": ["mod_security", "modsecurity", "406 not acceptable"],
+    "imperva/incapsula": ["x-iinfo", "incap_ses", "visid_incap", "incapsula"],
+    "f5/big-ip": ["bigipserver", "x-wa-info", "the requested url was rejected"],
+    "fortinet": ["fortigate", "fortinet"],
+    "sucuri": ["x-sucuri-id", "sucuri"],
+    "akamai": ["x-akamai", "akamai reference"],
+}
+
+
+def detect_waf(headers, body_text):
+    text = (str(headers) + " " + body_text[:20000]).lower()
+    best, best_hits = None, 0
+    for waf_type, sigs in WAF_SIGNATURES.items():
+        hits = sum(1 for s in sigs if s in text)
+        if hits > best_hits:
+            best, best_hits = waf_type, hits
+    return best, best_hits
+
+
 def main():
     parser = argparse.ArgumentParser(description="One-request baseline check")
     parser.add_argument("--url", required=True)
@@ -79,16 +102,19 @@ def main():
                 headers["Content-Type"] = "application/x-www-form-urlencoded"
 
     req = urllib.request.Request(args.url, data=data, headers=headers, method=method)
+    rheaders = None
     try:
         with urllib.request.urlopen(req, timeout=args.timeout) as resp:
             status = resp.status
             final_url = resp.geturl()
+            rheaders = resp.headers
             ctype = resp.headers.get("Content-Type", "")
             cdisp = resp.headers.get("Content-Disposition", "")
             body = resp.read(1_000_000)
     except urllib.error.HTTPError as exc:
         status = exc.code
         final_url = exc.geturl()
+        rheaders = exc.headers
         ctype = exc.headers.get("Content-Type", "") if exc.headers else ""
         cdisp = exc.headers.get("Content-Disposition", "") if exc.headers else ""
         try:
@@ -101,6 +127,7 @@ def main():
 
     text = body.decode("utf-8", "replace")
     login_redirect = "/login" in final_url or "login?" in final_url
+    waf_type, waf_hits = detect_waf(rheaders or {}, text)
     rows = None
     first_line = text.lstrip("\ufeff").splitlines()[0] if text.strip() else ""
     if "text/csv" in ctype.lower() or (first_line.count(",") >= 2 and "html" not in ctype.lower()):
@@ -116,6 +143,10 @@ def main():
         print("CONTENT_DISPOSITION: %s" % cdisp)
     print("BYTES_READ: %d" % len(body))
     print("LOGIN_REDIRECT: %s" % ("yes" if login_redirect else "no"))
+    print("WAF_DETECTED: %s" % ("yes" if waf_type else "no"))
+    if waf_type:
+        print("WAF_TYPE: %s (signatures=%d)" % (waf_type, waf_hits))
+        print("WARN: 基线响应带 WAF 指纹——先看 playbook 的 WAF→tamper 表再开跑。")
     if rows is not None:
         print("CSV_DATA_ROWS: %d" % rows)
     preview = text[: max(0, args.preview)].replace("\r", "")

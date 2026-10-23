@@ -1,7 +1,7 @@
 ---
 name: sqlmap-skill
 description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.0.0
+version: 2.1.0
 display_name: sqlmap 分阶段注入工作流
 argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 ---
@@ -47,6 +47,8 @@ argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
   "level": 3,
   "time_sec": 5,
   "tamper": null,
+  "param": null,
+  "request_file": null,
   "stage": "detect",
   "table": null,
   "columns": null,
@@ -102,7 +104,7 @@ python scripts/sqlmap_run.py --job jobs/<标签>.json --stage tables
 | `file-read` | 读目标文件 | `file_read`（如 `"/etc/passwd"`） |
 | `file-write` | 写文件到目标 | `file_write`（本地源）+ `file_dest`（目标路径） |
 
-`tamper` 是 job 级字段（如 `"space2comment,between"`），作用于所有 stage——DVWA medium 档常用 `space2comment`。
+`tamper` 是 job 级字段（如 `"space2comment,between"`），作用于所有 stage——DVWA medium 档常用 `space2comment`。`param` 定向只测一个参数（多参数 URL 省请求）；`request_file` 指向 Burp/ZAP 抓包文件（`-r` 模式，Cookie/UA/头/请求体全从文件读，复杂请求首选）。
 
 ### Step 5 · 里程碑汇报
 
@@ -122,6 +124,23 @@ NEXT: 列表名 → --stage tables
 ```
 
 **交互式 shell 说明**：`--os-shell` / `--sql-shell` 是交互式的，与 `--batch` 不兼容，skill 的运行器**不用**它们；要交互 shell 就让用户自己开终端，把 `--dry-run` 输出的命令抄过去跑。skill 内一律用 `os-cmd` / `sql-query` 单发。
+
+## 下一步决策树（detect 之后怎么走）
+
+detect 的 milestone 读完后，按 EVIDENCE 选下一步，**每一步都报告选择理由**（这是本 skill 的"自适应"环节——AI 就是决策器，不需要外挂分析服务）：
+
+| 侦测到 | 下一步 |
+|---|---|
+| `INJECTABLE: true` 且无 WAF | `--stage tables` 继续枚举（用户说了目标深度就按目标走） |
+| `WAF: xxx` | 查 playbook 的 WAF→tamper 映射表 → job 加 `tamper` 重跑 `detect`（`--flush-session` 会自动带上） |
+| `WAF_DETECTED: yes`（baseline 预检） | 同上；还没开跑就更省——先定 tamper 再花请求 |
+| `CONNECT_ERROR` | 停，按失败分诊表处理网络/端口，别硬跑 |
+| 整站 403 | 先试浏览器 `user_agent`（DVWA 靶机实测是 UA 规则不是 WAF） |
+| `NO_PARAMS` | 检查 `*` 位置；或 Burp 抓包用 `request_file` |
+| 多参数 URL 只关心一个 | job 加 `param` 定向 |
+| 复杂请求（JSON/自定义头/精确重放） | Burp 抓包存文件 → `request_file` |
+| `not injectable` 但基线正常 | `level` 提到 3–5、换 `technique`（B/T）再跑一次；仍不行 → 记为**负例**结案（负例也是产出） |
+| DBMS 已识别 | `dbms` 写进 job 固化，后续 stage 省指纹请求 |
 
 ## 本机执行配方（WorkBuddy on Windows）
 

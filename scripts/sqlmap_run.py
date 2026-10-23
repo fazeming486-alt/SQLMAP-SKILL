@@ -113,13 +113,23 @@ def load_job(path):
         fail("job 不是合法的 JSON（已尝试 UTF-8 / UTF-8-SIG / GBK）")
     if not isinstance(job, dict):
         fail("job 必须是 JSON 对象")
-    target = str(job.get("target") or "").strip()
-    if not target.startswith(("http://", "https://")):
-        fail("target 必须是 http(s) 完整地址")
-    if "*" not in target:
-        fail("target 里必须用 * 标出注入点，例如 ...?keyword=1*&from=&to=")
-    parsed = urlparse(target)
-    if not host_is_private(parsed.hostname):
+    request_file = str(job.get("request_file") or "").strip()
+    if request_file:
+        if not os.path.isfile(request_file):
+            fail("request_file 不存在：%s" % request_file)
+        raw = open(request_file, "rb").read().decode("utf-8", "replace")
+        if "*" not in raw:
+            fail("request_file 里必须用 * 标出注入点（直接写在请求行或请求体的参数值里）")
+        m = re.search(r"(?im)^host:\s*(\S+)", raw)
+        host = m.group(1).split(":")[0] if m else None
+    else:
+        target = str(job.get("target") or "").strip()
+        if not target.startswith(("http://", "https://")):
+            fail("target 必须是 http(s) 完整地址（或用 request_file 指向 Burp/ZAP 请求文件）")
+        if "*" not in target:
+            fail("target 里必须用 * 标出注入点，例如 ...?keyword=1*&from=&to=")
+        host = urlparse(target).hostname
+    if not host_is_private(host):
         note = str(job.get("scope_note") or "").strip()
         if len(note) < 8:
             fail("公网目标：在 job 里写一行 scope_note（如 \"客户授权测试，范围 staging.example.com，10-20 至 10-25\"）。仅作记录，不阻断。")
@@ -147,6 +157,8 @@ def validate(job, stage):
     tamper = str(job.get("tamper") or "").strip()
     if tamper and not re.fullmatch(r"[A-Za-z0-9_,]+", tamper):
         fail("tamper 只能是逗号分隔的脚本名（字母/数字/下划线）")
+    if job.get("param") and not re.fullmatch(r"[A-Za-z0-9_\-\.\[\]\$@]+", str(job["param"])):
+        fail("param 只能是参数名（字母/数字/下划线/-/./[]/$/@）")
     if stage in ("columns", "dump"):
         table = str(job.get("table") or "").strip()
         if not re.fullmatch(r"[A-Za-z0-9_\.]+", table):
@@ -184,8 +196,10 @@ def build_command(job, stage, level, risk, delay, time_sec, threads, tamper):
         fail("找不到 sqlmap。设置 SQLMAP_PATH，或把 sqlmap 装到 ~/.workbuddy/tools/sqlmap/。", 1)
     out_dir = os.path.abspath(str(job.get("output_dir") or os.path.join("runs", "sqlmap-job")))
     os.makedirs(out_dir, exist_ok=True)
+    request_file = str(job.get("request_file") or "").strip()
     cmd = base + [
-        "-u", str(job["target"]),
+        "-r" if request_file else "-u",
+        request_file if request_file else str(job["target"]),
         "--batch",
         "--threads", str(threads),
         "--level", str(level),
@@ -197,21 +211,24 @@ def build_command(job, stage, level, risk, delay, time_sec, threads, tamper):
         cmd += ["--delay", str(delay)]
     if tamper:
         cmd += ["--tamper=" + tamper]
-    if job.get("cookie"):
-        cmd += ["--cookie", str(job["cookie"])]
-    if job.get("user_agent"):
-        cmd += ["--user-agent=" + str(job["user_agent"])]
-    headers = [str(h) for h in (job.get("headers") or []) if str(h).strip()]
-    if headers:
-        cmd += ["--headers", "\n".join(headers)]
+    if job.get("param"):
+        cmd += ["-p", str(job["param"])]
+    if not request_file:  # 请求文件自带 Cookie/UA/头/请求体，不再重复
+        if job.get("cookie"):
+            cmd += ["--cookie", str(job["cookie"])]
+        if job.get("user_agent"):
+            cmd += ["--user-agent=" + str(job["user_agent"])]
+        headers = [str(h) for h in (job.get("headers") or []) if str(h).strip()]
+        if headers:
+            cmd += ["--headers", "\n".join(headers)]
+        if job.get("data"):
+            cmd += ["--data", str(job["data"])]
+            if job.get("method"):
+                cmd += ["--method", str(job["method"]).upper()]
+        elif job.get("method"):
+            cmd += ["--method", str(job["method"]).upper()]
     if job.get("dbms"):
         cmd += ["--dbms=" + str(job["dbms"])]
-    if job.get("data"):
-        cmd += ["--data", str(job["data"])]
-        if job.get("method"):
-            cmd += ["--method", str(job["method"]).upper()]
-    elif job.get("method"):
-        cmd += ["--method", str(job["method"]).upper()]
     if job.get("technique"):
         cmd += ["--technique=" + str(job["technique"]).upper()]
     if job.get("union_cols"):
@@ -268,6 +285,12 @@ def summarize(out, stage):
         "blocked": False,
         "errors": [],
         "tail": [],
+        "params": [],
+        "os_info": None,
+        "web_tech": None,
+        "waf_type": None,
+        "connect_error": False,
+        "no_params": False,
     }
     lines = out.splitlines()
     for line in lines:
@@ -289,6 +312,22 @@ def summarize(out, stage):
         m = re.search(r"fetched data logged to text files under '([^']+)'", line)
         if m:
             info["artifacts"].append(m.group(1))
+        m = re.search(r"Parameter: (\S+) \((\w+)\)", line)
+        if m and m.group(1) not in info["params"]:
+            info["params"].append(m.group(1))
+        m = re.search(r"web server operating system: (.+)$", line.strip())
+        if m:
+            info["os_info"] = m.group(1).strip()
+        m = re.search(r"web application technology: (.+)$", line.strip())
+        if m:
+            info["web_tech"] = m.group(1).strip()
+        m = re.search(r"WAF/IPS identified as ['\"]?([^'\"\r\n]+)", line)
+        if m:
+            info["waf_type"] = m.group(1).strip()
+        if "connection refused" in low or "unable to connect to the target url" in low:
+            info["connect_error"] = True
+        if "no parameter(s) found for testing" in low:
+            info["no_params"] = True
         if "retrieved: " in line:
             m = re.search(r"retrieved: '?([^'\r\n]+)'?", line)
             if m:
@@ -297,6 +336,9 @@ def summarize(out, stage):
             info["types"].append(line.strip())
         if "[ERROR]" in line or "[CRITICAL]" in line:
             info["errors"].append(line.strip())
+    low_out = out.lower()
+    if not info["waf_type"] and "might be behind some kind of waf/ips" in low_out:
+        info["waf_type"] = "未识别型号（sqlmap 提示有 WAF/IPS）"
     seen = set()
     info["tables"] = [t for t in info["tables"] if not (t in seen or seen.add(t))]
     info["artifacts"] = list(dict.fromkeys(info["artifacts"]))
@@ -327,6 +369,18 @@ def print_milestone(stage, info, artifact_dir, log_path, exit_code):
             print("  " + line)
     if info["dbms"]:
         print("DBMS: %s" % info["dbms"])
+    if info["os_info"]:
+        print("OS: %s" % info["os_info"])
+    if info["web_tech"]:
+        print("WEB_TECH: %s" % info["web_tech"])
+    if info["waf_type"]:
+        print("WAF: %s" % info["waf_type"])
+    if info["params"]:
+        print("VULN_PARAMS: %s" % ", ".join(info["params"][:8]))
+    if info["connect_error"]:
+        print("CONNECT_ERROR: 目标连不上，先查网络/端口/主机")
+    if info["no_params"]:
+        print("NO_PARAMS: URL 里没找到可测参数，检查 * 位置或用 param 定向")
     if info["columns"]:
         print("QUERY_COLUMNS: %d" % info["columns"])
     if info["tables"]:
