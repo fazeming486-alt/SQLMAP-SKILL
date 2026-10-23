@@ -195,6 +195,7 @@ button.theme{background:var(--panel);border:1px solid var(--line);color:var(--te
 .pill.success{background:rgba(63,185,80,.15);color:var(--ok)}
 .pill.not_injectable{background:rgba(110,118,129,.15);color:var(--idle)}
 .pill.blocked{background:rgba(210,153,34,.15);color:var(--warn)}
+.pill.timeout{background:rgba(210,153,34,.15);color:var(--warn)}
 .pill.error{background:rgba(248,81,73,.15);color:var(--bad)}
 .evidence{font-family:Consolas,"Courier New",monospace;font-size:12.5px;
   background:var(--code-bg);border-top:1px solid var(--line);padding:10px 14px;white-space:pre-wrap;word-break:break-all}

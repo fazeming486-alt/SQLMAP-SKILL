@@ -1,7 +1,7 @@
 ---
 name: sqlmap-skill
 description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.2.0
+version: 2.3.0
 display_name: sqlmap 分阶段注入工作流
 argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 ---
@@ -68,6 +68,16 @@ argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 
   `--json` 输出 `{"cookie": "...", "level": "low", "login": "ok"}`，把 `cookie` 写进 job。
 - `session.mode = "manual"` → 让用户把 Cookie 写进 job 文件（指引见 `references/intake.md`），不要贴进聊天。
+
+### Step 2.5 · 自动找注入点（recon.py，没有现成注入点时）
+
+用户只给了入口 URL、不知道参数在哪时，先跑侦察：
+
+```
+python scripts/recon.py --base-url <入口URL> --scope-note "<一行范围记录>" --max-pages 20 --out runs/<标签>-candidates.json
+```
+
+被动爬取（链接/表单/robots/sitemap/JS 端点，纯 GET 浏览无攻击载荷），输出**候选注入点排行**，每条带可直接用的带 `*` 目标串。拿评分最高的一条（或人工挑）组装 job。加 `--probe` 可对无参 GET 端点做 Arjun 式参数名探测（响应差分判活，请求量=词表×端点，公网慎用）。
 
 ### Step 3 · 基线
 

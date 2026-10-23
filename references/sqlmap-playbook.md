@@ -73,6 +73,8 @@ X-CSRF-Token: <token>" \
 - `--batch` 非交互；threads 由 job 控制（私网档案可 1–10，公网建议 1）。
 - `--level 1–5`：payload 广度；`--risk 1–3`：侵入度（3 含 OR 类改数语句，dump/共享库慎用）。
 - `--user-agent "<串>"`：UA 有 UA 规则的目标必配浏览器串（DVWA 靶机实测：非浏览器 UA 全站 403；浏览器 UA 放行）。job 字段 `user_agent`，档案预填。
+- `timeout`（job 字段）：运行器单阶段超时秒数，默认 900。**隧道/公网慢目标建议 1800–3600**——实测 cloudflare tunnel 上 level 2 detect 每项技术 ~36 秒，15 分钟只够跑 1/3。
+- 隧道目标节奏经验：`threads=3, delay=0.8, time_sec=8`（RTT 会吃掉时延判定窗口，本地 5 秒在隧道上偏短）。
 - `--dbms` 已知库类型就写（省指纹）。
 - `--delay N` 请求间隔秒；公网/限速目标 1–3。
 - `--time-sec 3–10` 时延注入等待。
@@ -99,6 +101,15 @@ X-CSRF-Token: <token>" \
 | **DVWA 靶机的 403** | **不是 WAF，是 UA 规则**——别上 tamper，job 加浏览器 `user_agent` 即可 |
 
 baseline 的 `WAF_DETECTED/WAF_TYPE`（签名预检）与 sqlmap 的 `WAF:` 输出（`--identify-waf` 级）都看一眼再定 tamper。
+
+## 侦察（自动找注入点）
+
+`scripts/recon.py` 是 detect 之前的侦察步——只浏览不攻击，产出候选注入点：
+
+- **被动层**（默认）：BFS 爬同站链接、解析 `<form>`（action/method/字段）、robots.txt、sitemap.xml、JS 文件里的端点字符串（LinkFinder 式正则）。公网目标需一行 `--scope-note`。
+- **主动层**（`--probe`，可选）：对无参 GET 端点逐个试参数名（Arjun 式，内置 ~100 常用名，可 `--wordlist` 换大词表），状态码/长度差/反射三信号判活。请求量 = 词表 × 端点数，公网先用被动层。
+- 输出 `candidates.json` + 排行：score = 有参数(+3)/表单(+2)/API 路径(+2)/2xx(+1)/需登录(-1)，每条带 `suggest`（可直接粘进 job 的带 `*` 目标串）。
+- **选点判据**：优先 `q`/`category`/`id` 这类直接进 SQL 的检索型参数；带 `_csrf` 的 POST 表单要先处理 CSRF；标"⚠需登录"的要先补会话。
 
 ## 结果解读
 

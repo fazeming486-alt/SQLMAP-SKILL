@@ -352,6 +352,8 @@ def summarize(out, stage):
 
 
 def stage_status(stage, info):
+    if info.get("timeout"):
+        return "timeout"
     if info["blocked"]:
         return "blocked"
     if stage == "detect" and info["injectable"] is False:
@@ -465,6 +467,7 @@ def main():
     except subprocess.TimeoutExpired as exc:
         out = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
         info = summarize(out, stage)
+        info["timeout"] = True
         with open(log_path, "w", encoding="utf-8") as f:
             f.write(out)
         print_milestone(stage, info, out_dir, log_path, 1)

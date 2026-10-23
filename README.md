@@ -18,6 +18,7 @@ sqlmap 分阶段自动化注入的 agent skill（v2.2）。
 
 ## v2 能力
 
+- **自动找注入点**（v2.3 `scripts/recon.py`）：被动爬取（链接/表单/robots/sitemap/JS 端点）+ 可选 Arjun 式参数探测，输出带 `*` 标记的候选注入点排行，直接组装 job——只给入口 URL 也能全自动开打。
 - **靶场档案**（`profiles/`）：DVWA、北岸商城预置；命中档案零问答直通，节奏/注入点/会话方式全部预填。
 - **自动会话**：`scripts/dvwa_session.py` 自动登录取 token → 登录 → 切安全档位 → 输出 sqlmap 可用 Cookie（`--json`）。
 - **全能力 stage**：detect / dbs / current-db / tables / columns / dump / dump-all / passwords / privileges / sql-query / os-cmd / file-read / file-write。交互式 shell 与 `--batch` 不兼容，用单发 `--os-cmd` / `--sql-query` 替代。
