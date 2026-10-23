@@ -1,4 +1,6 @@
-# SQLi playbook（v3 · SQLi 模块）
+# SQLi playbook（v4 · SQLi 模块）
+
+> **v4 取证顺序**：`sqli_probe.py`（3–8 发，numeric/quoted/expr）→ 确认后再 `sqlmap_run.py` 深挖；单点也可用 `inject_probe.py`（arraykey）与 `expr_probe.py`（报表列名）。不要把 sqlmap 当第一步。
 
 ## Stage ↔ flag 对应
 

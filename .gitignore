@@ -5,3 +5,6 @@ jobs/
 __pycache__/
 *.pyc
 .venv/
+*-findings.json
+*evidence.json
+*-raw/
