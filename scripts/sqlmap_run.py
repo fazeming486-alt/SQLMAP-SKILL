@@ -127,8 +127,9 @@ def load_job(path):
         target = str(job.get("target") or "").strip()
         if not target.startswith(("http://", "https://")):
             fail("target 必须是 http(s) 完整地址（或用 request_file 指向 Burp/ZAP 请求文件）")
-        if "*" not in target:
-            fail("target 里必须用 * 标出注入点，例如 ...?keyword=1*&from=&to=")
+        data = str(job.get("data") or "")
+        if "*" not in target and "*" not in data:
+            fail("target 或 data 里必须用 * 标出注入点，例如 ...?keyword=1*&from=&to= 或 data=\"email=1*&password=x\"")
         host = urlparse(target).hostname
     if not host_is_private(host):
         note = str(job.get("scope_note") or "").strip()
@@ -177,6 +178,13 @@ def validate(job, stage):
     technique = str(job.get("technique") or "").upper()
     if technique and not re.fullmatch(r"[BEUST]+", technique):
         fail("technique 只能是 B/E/U/S/T 的组合")
+    if job.get("csrf_token"):
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+", str(job["csrf_token"])):
+            fail("csrf_token 只能是参数名（字母/数字/下划线/-）")
+        if job.get("csrf_url") and not str(job["csrf_url"]).startswith(("http://", "https://")):
+            fail("csrf_url 必须是 http(s) 地址（省略则用 target 取令牌）")
+        if job.get("csrf_method") and str(job["csrf_method"]).upper() not in ("GET", "POST"):
+            fail("csrf_method 只能是 GET 或 POST（取令牌用 GET 时必填，否则会继承 job 的 method）")
     if stage in ("sql-query", "os-cmd", "file-read", "file-write"):
         field = VALUE_STAGE_FIELD[stage]
         value = str(job.get(field) or "").strip()
@@ -198,6 +206,8 @@ def build_command(job, stage, level, risk, delay, time_sec, threads, tamper):
     out_dir = os.path.abspath(str(job.get("output_dir") or os.path.join("runs", "sqlmap-job")))
     os.makedirs(out_dir, exist_ok=True)
     request_file = str(job.get("request_file") or "").strip()
+    if job.get("csrf_token"):
+        threads = 1  # sqlmap 规矩：--csrf-token 与 --threads 不兼容，强制单线程
     cmd = base + [
         "-r" if request_file else "-u",
         request_file if request_file else str(job["target"]),
@@ -230,8 +240,19 @@ def build_command(job, stage, level, risk, delay, time_sec, threads, tamper):
             cmd += ["--method", str(job["method"]).upper()]
     if job.get("dbms"):
         cmd += ["--dbms=" + str(job["dbms"])]
+    if job.get("proxy"):
+        proxy = str(job["proxy"]).strip()
+        if not re.fullmatch(r"https?://[^\s]+", proxy):
+            fail("proxy 必须是 http(s):// 地址")
+        cmd += ["--proxy=" + proxy]
     if job.get("technique"):
         cmd += ["--technique=" + str(job["technique"]).upper()]
+    if job.get("csrf_token"):
+        cmd += ["--csrf-token=" + str(job["csrf_token"])]
+        if job.get("csrf_url"):
+            cmd += ["--csrf-url=" + str(job["csrf_url"])]
+        if job.get("csrf_method"):
+            cmd += ["--csrf-method=" + str(job["csrf_method"]).upper()]
     if job.get("union_cols"):
         cmd += ["--union-cols", str(int(job["union_cols"]))]
     if job.get("union_char"):

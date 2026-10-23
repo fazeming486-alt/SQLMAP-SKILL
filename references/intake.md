@@ -64,4 +64,6 @@ GET 接口通常不需要 CSRF；POST/JSON 才需要。以实际请求头为准�
 | `query` / `cmd` | sql-query / os-cmd 的带值参数 |
 | `file_read` / `file_write`+`file_dest` | file-read / file-write 的带值参数 |
 | `output_dir` | 本 engagement 的产物根目录 |
+| `proxy` | 走本地中继（TLS 指纹被拦时）：`http://127.0.0.1:8890`，target 同时改 `http://` |
 | `scope_note` | 公网目标必填的一行范围记录 |
+| `csrf_token` / `csrf_url` / `csrf_method` | POST 表单的 CSRF 参数名/取令牌页/取令牌方法（注意：sqlmap 的令牌获取不走 --proxy，指纹拦截场景改用固定令牌方案，见 playbook） |

@@ -1,10 +1,14 @@
 # SQLMAP-SKILL
 
-sqlmap 分阶段自动化注入的 agent skill（v2.2）。
+sqlmap 分阶段自动化注入的 agent skill（v2.4）。
 
 > v2.1 借鉴 [atiilla/sqlmap-ai](https://github.com/atiilla/sqlmap-ai)：`-p` 参数定向、`-r` 请求文件（Burp/ZAP 抓包直测）、WAF 指纹预检与 WAF→tamper 映射表、更细的结果解析（OS/Web 技术/受影响参数/连接错误分类）、detect 后自适应决策树。AI 决策由 agent 本体承担，不依赖外部 AI 服务。
 >
 > v2.2 新增 **HTML 交互报告**：`html_report.py` 把整个 engagement 渲染成单文件暗色可视化报告（概要卡片/阶段时间线/环形图/证据复制/dump 交互表带搜索排序翻页/哈希粉色高亮/日志折叠），离线双击即开。
+>
+> v2.3 新增 **自动找注入点**（`recon.py`）：被动爬取（链接/表单/robots/sitemap/JS 端点）+ 可选 Arjun 式参数探测，输出带 `*` 标记的候选注入点排行，直接组装 job——只给入口 URL 也能全自动开打。
+>
+> v2.4 新增 **TLS 中继**（`tls_relay.py`）：目标按 TLS 客户端指纹拦扫描器时（浏览器能开、sqlmap 全 403），本地 Plain-HTTP→Clean-TLS 中继让 sqlmap 零指纹出门；中继自管会话 cookie，job 加 `proxy` 字段即用。
 
 ## 安装
 

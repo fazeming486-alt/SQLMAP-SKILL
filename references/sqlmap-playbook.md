@@ -111,6 +111,30 @@ baseline 的 `WAF_DETECTED/WAF_TYPE`（签名预检）与 sqlmap 的 `WAF:` 输�
 - 输出 `candidates.json` + 排行：score = 有参数(+3)/表单(+2)/API 路径(+2)/2xx(+1)/需登录(-1)，每条带 `suggest`（可直接粘进 job 的带 `*` 目标串）。
 - **选点判据**：优先 `q`/`category`/`id` 这类直接进 SQL 的检索型参数；带 `_csrf` 的 POST 表单要先处理 CSRF；标"⚠需登录"的要先补会话。
 
+## TLS 指纹拦截与中继（2026-10-23 实战案例）
+
+**现象**：某 Cloudflare 隧道目标，浏览器/urllib 访问全部 200，唯独 sqlmap 的请求（无论 GET/POST、带不带 Cookie/UA）一律 403，页面是应用自带的"安全校验未通过"错误页；同主机公开页（/market）却不拦。
+
+**根因（用 TCP 管道中继抓 ClientHello 逐字节 diff 证实）**：
+- sqlmap 自带 `lib/request/httpshandler.py` 用 `set_ciphers("ALL@SECLEVEL=0")` 构建 TLS 上下文，ClientHello 带 **224 字节 padding 扩展** + 全密码表 → 畸形 JA3 指纹；
+- 应用/CDN 对**登录端点**按 TLS 指纹拦扫描器（公开目录页放行）；
+- 附带坑：走代理时 sqlmap 的 SNI 取 `self.host`（代理地址）→ 无 SNI；且 **CSRF 令牌获取（`direct=True`）不走 `--proxy`**，直连必被拦。
+
+**解法：本地 Plain-HTTP → Clean-TLS 中继（`scripts/tls_relay.py`）**：
+
+```
+python scripts/tls_relay.py --port 8890          # 另开一个终端常驻
+sqlmap -u "http://<host>/<path>" --proxy http://127.0.0.1:8890 ...
+```
+
+- sqlmap 到中继是明文 HTTP（零 TLS 指纹），中继用标准 TLS 重新向 https:// 目标发起；
+- 中继**自管会话 cookie**（解决 Secure cookie 不走 http 的问题：GET 响应的 `Set-Cookie` 进中继的袋子，后续请求自动注入）；
+- job 里加 `"proxy": "http://127.0.0.1:8890"`，target 改用 `http://`。
+
+**CSRF 表单的二次绕法**（令牌获取不走代理时）：不用 `--csrf-token`，改为自己经中继取一次真令牌写进 data：`data=_csrf=<真令牌>&email=1*&password=x`（令牌与会话绑定，中继会话不变即有效）。
+
+**仍可能撞的墙：登录限速（429）**。登录端点对失败登录计数是正常防护，中继和令牌都绕不过它——对策是加大 `delay`、降低单轮请求数、或等窗口重置，别硬刚（见失败分诊）。
+
 ## 结果解读
 
 - `is vulnerable` / `might be injectable` → 可注入；`does not seem to be injectable` → 不可注入。

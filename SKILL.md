@@ -1,7 +1,7 @@
 ---
 name: sqlmap-skill
 description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.3.0
+version: 2.4.0
 display_name: sqlmap 分阶段注入工作流
 argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 ---
@@ -171,6 +171,8 @@ detect 的 milestone 读完后，按 EVIDENCE 选下一步，**每一步都报�
   ```
   [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; python C:\Users\Administrator\.workbuddy\skills\sqlmap-skill\scripts\sqlmap_run.py --job <job绝对路径> --stage detect
   ```
+
+- **目标按 TLS 指纹拦扫描器时**（浏览器能开、sqlmap 全 403）：跑 `python scripts/tls_relay.py --port 8890` 常驻，job 加 `"proxy": "http://127.0.0.1:8890"`、target 改 `http://`。详见 playbook「TLS 指纹拦截与中继」。
 
 - **sqlmap 本体**：`C:\Users\Administrator\.workbuddy\tools\sqlmap\sqlmap.py`（运行器 `find_sqlmap()` 自动定位，无需配置）。
 - 日志/产物在 job 的 `output_dir`：`<dir>/<stage>.log`、`<dir>/<host>/dump/<db>/*.csv`。
