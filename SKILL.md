@@ -1,7 +1,7 @@
 ---
 name: sqlmap-skill
 description: sqlmap 分阶段自动化注入工作流（WorkBuddy skill）。命中靶场档案即零问答直通：自动登录取 Cookie → 基线核验 → 分阶段检测/枚举/取数/哈希/单发命令/读写文件 → 里程碑汇报，每步证据落盘。触发场景：用 sqlmap 打 SQL 注入、注入测试、注入点检测、布尔盲注、UNION 盲注、拖库/取表/取列/取数据、dump 数据库、DVWA/北岸商城等自有靶场演练。中英触发词：sqlmap、SQL注入、SQL 注入、注入测试、注入点、拖库、盲注、UNION 注入、dump 数据库、sqli、SQL injection、dump database、injection point。
-version: 2.1.0
+version: 2.2.0
 display_name: sqlmap 分阶段注入工作流
 argument-hint: <目标 URL 或档案名，如 dvwa / northbank / http://...>
 ---
@@ -124,6 +124,16 @@ NEXT: 列表名 → --stage tables
 ```
 
 **交互式 shell 说明**：`--os-shell` / `--sql-shell` 是交互式的，与 `--batch` 不兼容，skill 的运行器**不用**它们；要交互 shell 就让用户自己开终端，把 `--dry-run` 输出的命令抄过去跑。skill 内一律用 `os-cmd` / `sql-query` 单发。
+
+### Step 6 · HTML 交互报告
+
+每个 stage 跑完都会自动往 `summary.json` 落结构化结果（Cookie 掩码）。要出**单文件可视化报告**时：
+
+```
+python scripts/html_report.py --output-dir runs/<标签> --title "报告标题"
+```
+
+产出 `<output_dir>/report.html`：暗色单文件、离线双击即开（file:// 无外部依赖）。内容：概要卡片（DBMS/OS/Web 技术/WAF/受影响参数/节奏）、阶段时间线 + 状态环形图、注入证据（Type/Title/Payload 可复制）、**dump 数据交互表**（搜索/点列排序/翻页，MD5/SHA/bcrypt/Argon2 哈希自动粉色高亮）、原始日志折叠视图、明暗主题切换。跑完 stage 后主动问用户要不要出报告，出完把 `REPORT:` 路径给用户。
 
 ## 下一步决策树（detect 之后怎么走）
 

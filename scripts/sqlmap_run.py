@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from urllib.parse import urlparse
 
 if hasattr(sys.stdout, "reconfigure"):  # 固定 UTF-8，避免 GBK 控制台/管道乱码
@@ -350,15 +351,50 @@ def summarize(out, stage):
     return info
 
 
-def print_milestone(stage, info, artifact_dir, log_path, exit_code):
+def stage_status(stage, info):
     if info["blocked"]:
-        status = "blocked"
-    elif stage == "detect" and info["injectable"] is False:
-        status = "not_injectable"
-    elif info["errors"] and not info["artifacts"] and stage != "detect":
-        status = "error"
-    else:
-        status = "success"
+        return "blocked"
+    if stage == "detect" and info["injectable"] is False:
+        return "not_injectable"
+    if info["errors"] and not info["artifacts"] and stage != "detect":
+        return "error"
+    return "success"
+
+
+def write_summary(out_dir, job, stage, info, exit_code, log_path, started_at, duration_sec):
+    """把一个 stage 的结构化结果合并进 <out_dir>/summary.json（Cookie/头掩码），供 html_report.py 渲染。"""
+    redacted = dict(job)
+    redacted["cookie"] = "<redacted>" if job.get("cookie") else None
+    if job.get("headers"):
+        redacted["headers"] = ["<redacted>"] * len(job["headers"])
+    path = os.path.join(out_dir, "summary.json")
+    data = {"job": {}, "stages": {}}
+    if os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {"job": {}, "stages": {}}
+    slim_info = {k: v for k, v in info.items() if k != "tail"}
+    if isinstance(slim_info.get("tables"), list):
+        slim_info["tables"] = slim_info["tables"][:50]
+    data["job"] = redacted
+    data["generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    data.setdefault("stages", {})[stage] = {
+        "status": stage_status(stage, info),
+        "exit": exit_code,
+        "log": os.path.basename(log_path),
+        "started_at": time.strftime("%H:%M:%S", time.localtime(started_at)),
+        "duration_sec": round(duration_sec, 1),
+        "info": slim_info,
+        "tail": info.get("tail", [])[:14],
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def print_milestone(stage, info, artifact_dir, log_path, exit_code):
+    status = stage_status(stage, info)
     print("=== STAGE: %s ===" % stage)
     print("STATUS: %s" % status)
     if info["injectable"] is not None:
@@ -420,6 +456,7 @@ def main():
         return 0
 
     log_path = os.path.join(out_dir, stage + ".log")
+    started_at = time.time()
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8",
@@ -431,6 +468,7 @@ def main():
         with open(log_path, "w", encoding="utf-8") as f:
             f.write(out)
         print_milestone(stage, info, out_dir, log_path, 1)
+        write_summary(out_dir, job, stage, info, 1, log_path, started_at, time.time() - started_at)
         print("TIMEOUT: 超过 %s 秒，已中断。" % job.get("timeout", 900))
         return 1
     out = proc.stdout or ""
@@ -445,6 +483,7 @@ def main():
     elif stage == "detect" and info["injectable"] is False:
         code = 2
     print_milestone(stage, info, out_dir, log_path, code)
+    write_summary(out_dir, job, stage, info, code, log_path, started_at, time.time() - started_at)
     return code
 
 

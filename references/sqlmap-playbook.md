@@ -124,6 +124,8 @@ baseline 的 `WAF_DETECTED/WAF_TYPE`（签名预检）与 sqlmap 的 `WAF:` 输�
 ## 产物与报告
 
 - 日志：`<output_dir>/<stage>.log`（运行器自动落盘）。
+- 结构化结果：`<output_dir>/summary.json`（每 stage 自动合并，Cookie 掩码）。
 - 数据：`<output_dir>/<host>/dump/<db>/<table>.csv`。
+- **HTML 报告**：`python scripts/html_report.py --output-dir <dir> --title "标题"` → `<dir>/report.html`（单文件离线可交互：概要卡片/时间线/环形图/证据/dump 交互表/日志折叠/哈希高亮）。
 - milestone：`STAGE / STATUS / EVIDENCE / DBMS / TABLES / ARTIFACTS / LOG / EXIT`，逐 stage 报。
 - 终报要素：目标与范围、入口、请求形态、技术与 payload、暴露数据、修法、产物路径、未测项。Cookie/CSRF/个人数据掩码。
