@@ -26,6 +26,8 @@ GET  /exports/<uuid>/download?exp=...&sig=...
 ## 关键点
 
 - **UUID 可枚举**通常不是指 UUID 随机性，而是**某处泄露了 job ID**：审计日志、管理端、列表越权、错误页、其他账号。先找 ID 泄露源。
+- 管理端审计的 `?action=` 过滤很好用：`/admin/audit?action=export`、`?action=export.download` 会把 `export_job#<uuid>` 当对象列出来；先看是否有非本租户的用户/对象，再取 UUID。
+- 列表页、下载页、详情页要分别测；常见组合是“列表只给本租户，但详情/下载漏租户校验”。`/exports/<uuid>` 404 而 `/exports/<uuid>/download` 403，说明记录存在、卡在签名，不是不存在。
 - 签名可能只覆盖 `exp`，也可能覆盖 `path`；用“换 job + 保留 sig”区分。
 - 任务列表的租户过滤必须在服务端会话里，不能接受客户端 `tenant` 参数。
 - 下载前先按 `job.tenant_id == session.tenant_id` 查任务，再校验签名。

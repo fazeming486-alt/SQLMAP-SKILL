@@ -224,9 +224,14 @@ NEXA 实测：MariaDB 10.11，库 `nexa_report`，只读账号 `nexa_report_ro@.
 ## 保存报表 / 二阶注入（v4.2）
 
 - 创建报表时参数化，不代表调度执行时安全；重点看 `status`、`region`、`channel` 等自由文本。
-- 判据：`status=paid' OR '1'='1` 让结果从 1 个分组变成全部状态；`AND 1=2` 归零；UNION 常因外层 `GROUP BY` 报 `GroupingError`，优先布尔/盲注。
-- 报表数量有上限（OBSIDIAN 为 8 条）时，先看是否有编辑/删除路由；没有就复用已有报表或换注入位。
-- 工具：`scripts/report_probe.py`。
+- 判据：`status=paid' OR '1'='1` 让结果从 1 个分组变成全部状态；`AND 1=2` 归零；UNION 常因外层 `GROUP BY` 报 `GroupingError`。
+- **注释符会拆掉尾部 GROUP BY**：应用模板可能是 `status='<payload>' GROUP BY status`。`-- ` / `/*` 会把 GROUP BY 注释掉 → `GroupingError`。改用不带注释的闭合：`paid' AND 1=1 AND 'x'='x`（末尾的 `'x` 由模板自带的收尾单引号闭合）。
+- **判库**：`information_schema.tables` 可查 → PostgreSQL/MySQL；`sqlite_master` 报 `UndefinedTable` → 不是 SQLite。Postgres 可用 `to_regclass('表名')` 做存在性布尔。
+- **一次性取值（UNION 保留 GROUP BY）**：若 `GROUP BY` 跟在注入点之后，用别名对齐分组列：
+  `paid' UNION SELECT to_jsonb(feature_flags)::text AS status,1,1 FROM feature_flags WHERE 'x'='x`
+  第二段 `SELECT` 的 `GROUP BY status` 指向别名，可把整行 JSON 当成分组键显示；比逐字符盲注快得多。失败时退回布尔盲注。
+- **报表创建有节流**：OBSIDIAN 返回 `err=报表创建过于频繁`（不是配额）。失败尝试可能重置冷却，停止重试 15–30 分钟；期间用 `--existing-id` 跑已有报表、或换注入位。报表**无编辑/删除**路由（`/reports/<id>`、`/edit`、`/update` 均 404），run 也不接受 `status` 覆盖。
+- 工具：`scripts/report_probe.py`（`--existing-id` 复用；`--flag-regex` 从对应结果行提取）。
 
 ## 结果解读
 
