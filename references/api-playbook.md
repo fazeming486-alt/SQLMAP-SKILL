@@ -18,6 +18,11 @@
 
 ## 认证
 
+**HMAC 签名**（OBSIDIAN 合作方 API）：`timestamp + "
+" + METHOD + "
+" + path_with_query + "
+" + raw_body` 的 HMAC-SHA256，放在 `X-*-Signature`；用 `scripts/hmac_client.py` 直接调用。签名必须用**规范化后的 path**（Windows 下 `/partner/...` 会被 MSYS 转成 `C:/Program Files/Git/...`）。
+
 - Cookie（门户会话）
 - `Authorization: Bearer <token>`
 - `X-API-Key`

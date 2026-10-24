@@ -1,7 +1,7 @@
 ---
 name: web-pentest
 description: 授权 Web 渗透测试工作台（v4）：可编排的侦察 → 角色/会话 → 配置面 → XSS → 越权/IDOR → SQLi/表达式注入 → SSRF → 上传面 → 证据 → HTML 报告。内置 httpkit/findings/engage 内核，统一预算、限速、Cookie 轮换、证据与去重；可选 nuclei/httpx/katana 等外部工具适配。触发场景：Web 渗透、漏洞侦察、攻击面、角色矩阵、SQL 注入、列名注入、XSS、越权、IDOR、SSRF、上传、配置错误、业务逻辑，以及 DVWA/北岸/南岭/NEXA 等自有靶场。中英触发词：web pentest、渗透测试、侦察、攻击面、SQL注入、SQL injection、sqli、XSS、SSRF、IDOR、越权、文件上传、misconfiguration、business logic、security report。
-version: 4.1.3
+version: 4.1.4
 display_name: Web 渗透测试工作台
 argument-hint: <目标 URL / engage.json / 档案名，如 dvwa / northbank>
 ---
@@ -117,7 +117,7 @@ python scripts/report.py --run-dir runs/demo
 | ssrf | URL/回调/图片/代理类参数 | `ssrf_probe.py` | `ssrf-playbook.md` | 1–5/参数 |
 | upload | 有 multipart 表单 | `upload_probe.py` | `upload-playbook.md` | 1/page |
 | export | 异步导出/签名下载/任务 ID | `export_probe.py` | `export-playbook.md` | 3–10 |
-| api | 合作方/移动 API，无导航无文档 | `api_probe.py` | `api-playbook.md` | 路由×方法 |
+| api | 合作方/移动 API，无导航无文档 | `api_probe.py`、`hmac_client.py` | `api-playbook.md` | 路由×方法 |
 | oidc | OIDC/OAuth 登录、回调地址 | `oidc_probe.py` | `oidc-playbook.md` | 8–12 |
 | nuclei | 想用社区模板补盲 | `tool_adapters.py` | `tooling.md` | 由模板决定 |
 
@@ -226,3 +226,4 @@ python scripts/tool_adapters.py --run httpx --target https://host
 - `references/tooling.md` —— 外部工具适配与安全参数。
 - `references/reporting.md` —— findings 模型、严重度、脱敏、报告结构。
 - `references/lab-ops.md` —— 靶场/演练运维：短会话、登录 429、凭据缺失、记分板与复盘。
+- `scripts/hmac_client.py` —— 通用 HMAC 签名 API 客户端（timestamp + method + path + body）。

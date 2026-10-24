@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.1.3）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.1.4）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -100,6 +100,8 @@ python scripts/report.py --run-dir runs/demo
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.1.4**：新增 `hmac_client.py`（时间戳+方法+路径+body 的 HMAC-SHA256 API 客户端）；OBSIDIAN API-08/OAUTH-05 实战验证。
 >
 > **v4.1.3**：新增 `references/lab-ops.md`（短会话、登录 429、凭据缺失、记分板/复盘）；买家侧 OBSIDIAN 干净回归报告入库。
 >
