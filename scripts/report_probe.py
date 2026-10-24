@@ -137,6 +137,8 @@ def main():
     p.add_argument("--timeout", type=float, default=45)
     p.add_argument("--out", default="report-findings.json")
     p.add_argument("--evidence-dir", default="report-raw")
+    p.add_argument("--flag-regex", default=r"\b[A-Z][A-Z0-9_]{2,19}\{[ -~]{4,120}\}",
+                   help="从运行结果里提取 flag/令牌的模式")
     args = p.parse_args()
     if not args.payload:
         args.payload = ["paid"]
@@ -147,13 +149,19 @@ def main():
         res = run_report(c, args, args.existing_id)
         page = res.get("page", "")
         parsed = parse_run(page, args.name_prefix) if page else None
+        flags = re.findall(args.flag_regex,
+                           html.unescape((parsed or {}).get("row", "") or page))
         print(json.dumps({"existing_id": args.existing_id, "run": res.get("run_status"),
-                          "parsed": parsed}, ensure_ascii=False, indent=2))
-        store.add(module="report", title="已运行已有报表（二阶注入位点）", severity="info",
-                  endpoint=args.base + args.create_path, method="POST", confidence="surface",
+                          "parsed": parsed, "flags": flags}, ensure_ascii=False, indent=2))
+        store.add(module="report", title="已运行已有报表（二阶注入位点）",
+                  severity="high" if flags else "info",
+                  endpoint=args.base + args.create_path, method="POST",
+                  confidence="confirmed" if flags else "surface",
                   evidence={"existing_id": args.existing_id, "run_status": res.get("run_status"),
-                            "parsed": parsed},
-                  impact="需要观察运行结果/错误来判断是否注入。", remediation="—",
+                            "parsed": parsed, "flags": flags},
+                  impact=("重放时执行并回显敏感数据/flag。" if flags else
+                          "需要观察运行结果/错误来判断是否注入。"),
+                  remediation="筛选器存储前做类型/枚举校验；重放时使用参数化查询；报表查询加租户过滤。",
                   tags=["report", "second-order"])
         store.save()
         return
@@ -174,16 +182,19 @@ def main():
         page = rr.get("page", "")
         parsed = parse_run(page, name) or {}
         line = parsed.get("row", "")
-        print("PAYLOAD", i, "report", rid, "|", parsed.get("status"), "|", line[:260])
+        flags = re.findall(args.flag_regex, html.unescape(line or page))
+        print("PAYLOAD", i, "report", rid, "|", parsed.get("status"), "|", line[:260],
+              "| flags", flags)
         outcomes.append({"index": i, "payload": payload, "report_id": rid,
-                         "run_status": rr.get("run_status"), "line": line[:600]})
+                         "run_status": rr.get("run_status"), "line": line[:600],
+                         "flags": flags})
 
     counts = [judge(o["line"], [])["count"] for o in outcomes]
     counts = [n for n in counts if n is not None]
     confirmed = []
     for o in outcomes:
         verdict = judge(o["line"], counts)
-        high = verdict["verdict"] in ("error-based", "boolean-diff")
+        high = verdict["verdict"] in ("error-based", "boolean-diff") or bool(o["flags"])
         if high:
             confirmed.append(o)
         store.add(module="report",
@@ -193,7 +204,7 @@ def main():
                   confidence="confirmed" if high else "needs-review",
                   evidence={"payload": o["payload"], "report_id": o["report_id"],
                             "run_status": o["run_status"], "verdict": verdict,
-                            "result": o["line"]},
+                            "flags": o["flags"], "result": o["line"]},
                   impact=("保存时未拦截、重放时拼接执行，可读跨租户/跨状态数据。"
                           if high else "结果未见行数差异或报错；换布尔/报错载荷再试。"),
                   remediation="筛选器存储前做类型/枚举校验；重放时使用参数化查询；报表查询加租户过滤。",
@@ -203,6 +214,7 @@ def main():
                   endpoint=args.base + args.create_path, method="POST", confidence="confirmed",
                   evidence={"payloads": [o["payload"] for o in confirmed],
                             "counts": counts,
+                            "flags": [f for o in confirmed for f in o["flags"]],
                             "reports": [o["report_id"] for o in confirmed]},
                   impact="同一筛选器的布尔/报错载荷在重放阶段产生显著行数差异或 SQL 报错。",
                   remediation="同上报；修复后重放同一批报表验证行数回落。",

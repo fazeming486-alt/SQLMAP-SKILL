@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.2.2）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.2.3）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -112,6 +112,8 @@ python scripts/webhook_probe.py --base http://127.0.0.1:8899 --email a@b.c --pas
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.2.3**：`report_probe` 增加 `--flag-regex`，只从对应报表结果行提取令牌（避免多载荷互相串旗）；`--existing-id` 命中 flag 直接出 high；自检靶点加报表 flag 用例。
 >
 > **v4.2.2**：修复 `report_probe` 结果解析误匹配“已保存报表列表行”（导致全部 inconclusive）；CSRF 提取兼容单/双引号；新增 `selftest_workbench.py`（本地模拟报表/Webhook，一条命令验证两模块）；本地端到端：3 个布尔/报错载荷 → 3 high，webhook 302→200 + flag → high。
 >

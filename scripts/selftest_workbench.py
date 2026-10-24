@@ -114,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                 if "UNION" in s.upper():
                     STATE["results"][rep["name"]] = "失败 — GroupingError: 1056"
                 elif "OR '1'='1" in s:
-                    STATE["results"][rep["name"]] = "已完成 — 7 组"
+                    STATE["results"][rep["name"]] = "已完成 — 7 组 FLAG{selftest-report}"
                 else:
                     STATE["results"][rep["name"]] = "已完成 — 1 组"
             return self.redirect("/supplier/reports")
