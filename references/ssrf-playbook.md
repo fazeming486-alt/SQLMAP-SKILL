@@ -31,6 +31,13 @@
 - 回调可能被目标出站防火墙拦截；收不到 ≠ 无 SSRF，换 DNS/端口/协议再试。
 - 证据：注入请求、回调日志（时间、path、源 IP）、原始响应。
 
+## Webhook 首跳绕过（v4.2）
+
+- 很多实现只校验“创建时的 URL”（HTTPS/公网），投递时默认跟随 302，不再校验。
+- 用合法 HTTPS 重定向器（httpbin `/redirect-to`）作为首跳，内层指向 `http://api:8000/metrics` 等内部服务。
+- OBSIDIAN 实测：`127.0.0.1:8000` 是 worker 自己的回环，Connection refused；Docker 服务名 `api:8000` 才通。
+- 工具：`scripts/webhook_probe.py`；结果页若截断响应，优先找短内部端点/flag 路径。
+
 ## 工具
 
 - `ssrf_probe.py`：本地回调 + token 命中。

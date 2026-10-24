@@ -221,6 +221,13 @@ NEXA 实测：MariaDB 10.11，库 `nexa_report`，只读账号 `nexa_report_ro@.
 - 数字 ID 在路径里先看格式校验；数组键名（`qty[113]`）常被漏掉，但 NEXA 这里是安全的。
 - 应用限速是正当防护；但 NEXA 的瓶颈其实是隧道 2–4 秒延迟，不是 600 次/分钟。
 
+## 保存报表 / 二阶注入（v4.2）
+
+- 创建报表时参数化，不代表调度执行时安全；重点看 `status`、`region`、`channel` 等自由文本。
+- 判据：`status=paid' OR '1'='1` 让结果从 1 个分组变成全部状态；`AND 1=2` 归零；UNION 常因外层 `GROUP BY` 报 `GroupingError`，优先布尔/盲注。
+- 报表数量有上限（OBSIDIAN 为 8 条）时，先看是否有编辑/删除路由；没有就复用已有报表或换注入位。
+- 工具：`scripts/report_probe.py`。
+
 ## 结果解读
 
 - `is vulnerable` / `might be injectable` → 可注入；`does not seem to be injectable` → 不可注入。
