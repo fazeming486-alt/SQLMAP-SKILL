@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.2.4）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.2.5）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -112,6 +112,8 @@ python scripts/webhook_probe.py --base http://127.0.0.1:8899 --email a@b.c --pas
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.2.5**：`report_probe` 新增 `--payload-suffix`（如 ` AND 'x'='x`），用于消费模板收尾引号、避免注释拆掉尾部 `GROUP BY`；本地自检通过。
 >
 > **v4.2.4**：新增 `references/case-obsidian.md`（报表二阶的无注释闭合、PostgreSQL 判库、`to_jsonb` 单次取值、审计 `?action=export` 找 job UUID、Webhook 配额/截断、CSP 下的旧版 XSS）；SQLi/导出 playbook 同步补充实操坑。
 >

@@ -1,7 +1,7 @@
 ---
 name: web-pentest
 description: 授权 Web 渗透测试工作台（v4）：可编排的侦察 → 角色/会话 → 配置面 → XSS → 越权/IDOR → SQLi/表达式注入 → SSRF → 上传面 → 证据 → HTML 报告。内置 httpkit/findings/engage 内核，统一预算、限速、Cookie 轮换、证据与去重；可选 nuclei/httpx/katana 等外部工具适配。触发场景：Web 渗透、漏洞侦察、攻击面、角色矩阵、SQL 注入、列名注入、XSS、越权、IDOR、SSRF、上传、配置错误、业务逻辑，以及 DVWA/北岸/南岭/NEXA 等自有靶场。中英触发词：web pentest、渗透测试、侦察、攻击面、SQL注入、SQL injection、sqli、XSS、SSRF、IDOR、越权、文件上传、misconfiguration、business logic、security report。
-version: 4.2.4
+version: 4.2.5
 display_name: Web 渗透测试工作台
 argument-hint: <目标 URL / engage.json / 档案名，如 dvwa / northbank>
 ---
@@ -60,7 +60,7 @@ python scripts/upload_probe.py --page https://host/upload
 python scripts/export_probe.py --base https://host --cookie-jar buyer.txt
 python scripts/api_probe.py --base https://host --route /partner/v1/profile
 python scripts/oidc_probe.py --issuer https://host --client-id <id> --redirect-uri https://host/oidc/callback
-python scripts/report_probe.py --base https://host --email merchant@x --password ... --totp-secret BASE32 --payload "paid' OR '1'='1"
+python scripts/report_probe.py --base https://host --email merchant@x --password ... --totp-secret BASE32 --payload "paid' OR '1'='1" --payload "paid' AND 1=2" --payload-suffix " AND 'x'='x"
 python scripts/webhook_probe.py --base https://host --email merchant@x --password ... --totp-secret BASE32 --inner http://api:8000/metrics
 python scripts/report.py --run-dir runs/demo
 ```

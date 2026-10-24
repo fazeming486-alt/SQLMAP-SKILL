@@ -130,6 +130,8 @@ def main():
     p.add_argument("--date-from", default="2026-01-01")
     p.add_argument("--date-to", default="2026-12-31")
     p.add_argument("--payload", action="append", default=[], help="status 字段载荷，可重复")
+    p.add_argument("--payload-suffix", default="",
+                   help="追加到每个载荷末尾；如 \" AND 'x'='x\"（消费模板收尾引号，避免注释拆掉 GROUP BY）")
     p.add_argument("--name-prefix", default="probe")
     p.add_argument("--existing-id", type=int, default=None, help="只运行已有报表，不新建")
     p.add_argument("--wait", type=float, default=4)
@@ -168,6 +170,7 @@ def main():
 
     outcomes = []
     for i, payload in enumerate(args.payload, 1):
+        payload = payload + args.payload_suffix
         name = "%s-%d" % (args.name_prefix, i)
         cr = create_report(c, args, name, payload)
         if "error" in cr:
