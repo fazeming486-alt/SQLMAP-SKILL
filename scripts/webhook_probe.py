@@ -25,7 +25,7 @@ from findings import FindingStore
 
 
 def csrf_of(text):
-    m = re.search(r'name="_csrf"\s+value="([^"]+)"', text or "")
+    m = re.search(r'name=["\']_csrf["\']\s+value=["\']([^"\']+)["\']', text or "")
     return m.group(1) if m else None
 
 
@@ -54,6 +54,8 @@ def main():
     p.add_argument("--events", default="order.created")
     p.add_argument("--endpoint-id", type=int, default=None,
                    help="复用已存在的回调端点（配额满时用）")
+    p.add_argument("--flag-regex", default=r"\b[A-Z][A-Z0-9_]{2,19}\{[ -~]{4,120}\}",
+                   help="从投递结果里提取 flag/令牌的模式")
     p.add_argument("--wait", type=float, default=3)
     p.add_argument("--rps", type=float, default=1.0)
     p.add_argument("--timeout", type=float, default=45)
@@ -103,7 +105,7 @@ def main():
         rows = delivery_rows(final["text"])
         hit = [x for x in rows if inner in x or args.redirector in x]
         delivery = hit[-1][:800] if hit else ""
-        flags = re.findall(r"OBSIDIAN\{[^}]+\}", html.unescape(final["text"]))
+        flags = re.findall(args.flag_regex, html.unescape(final["text"]))
         codes = re.findall(r"\b[1-5]\d{2}\b", delivery)
         followed = bool(re.search(r"\b30[1278]\b.{0,60}?\b20[0-4]\b", delivery, re.S))
         severity = "high" if (flags or followed) else "info"

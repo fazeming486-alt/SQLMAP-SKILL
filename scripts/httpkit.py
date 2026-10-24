@@ -327,7 +327,7 @@ class HttpClient:
     def post(self, url, data=None, **kw):
         return self.request("POST", url, data=data, **kw)
 
-    def login(self, url, data, csrf_url=None, csrf_regex=r'name="_csrf"\s+value="([^"]+)"',
+    def login(self, url, data, csrf_url=None, csrf_regex=r'name=["\']_csrf["\']\s+value=["\']([^"\']+)["\']',
               csrf_field="_csrf", method="POST", tag="login", totp_secret=None,
               totp_field="code", mfa_url="/mfa"):
         """通用登录：CSRF → 密码 →（可选）TOTP MFA。成功后 jar 自动更新，并记住登录参数用于自动重登。"""

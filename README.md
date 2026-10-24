@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.2.1）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.2.2）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -32,6 +32,16 @@ python scripts/export_probe.py --base https://host --cookie-jar buyer.txt
 python scripts/api_probe.py --base https://host --route /partner/v1/profile
 python scripts/oidc_probe.py --issuer https://host --client-id <id> --redirect-uri https://host/oidc/callback
 python scripts/report.py --run-dir runs/demo
+```
+
+保存报表 / Webhook 自检（新终端起靶点，再跑 probe）：
+
+```bash
+python scripts/selftest_workbench.py --port 8899
+python scripts/report_probe.py --base http://127.0.0.1:8899 --email a@b.c --password x \
+  --payload "paid' OR '1'='1" --payload "paid' AND 1=2" --wait 0.2
+python scripts/webhook_probe.py --base http://127.0.0.1:8899 --email a@b.c --password x \
+  --redirector "http://127.0.0.1:8899/redirect?url=" --inner "http://internal:8000/flag" --wait 0.2
 ```
 
 ## 模块
@@ -102,6 +112,8 @@ python scripts/report.py --run-dir runs/demo
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.2.2**：修复 `report_probe` 结果解析误匹配“已保存报表列表行”（导致全部 inconclusive）；CSRF 提取兼容单/双引号；新增 `selftest_workbench.py`（本地模拟报表/Webhook，一条命令验证两模块）；本地端到端：3 个布尔/报错载荷 → 3 high，webhook 302→200 + flag → high。
 >
 > **v4.2.1**：`report_probe.py` 增加布尔/报错判据（行数差、SQL 报错、控制组），`webhook_probe.py` 支持复用端点与 302→200 判据；新增 `references/logic-playbook.md`（业务逻辑/竞争/幂等/账本）；XSS playbook 补旧版原文渲染；清理仓库自检产物。
 >

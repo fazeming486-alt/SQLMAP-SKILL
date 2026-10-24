@@ -28,7 +28,7 @@ from findings import FindingStore
 
 
 def csrf_of(text):
-    m = re.search(r'name="_csrf"\s+value="([^"]+)"', text or "")
+    m = re.search(r'name=["\']_csrf["\']\s+value=["\']([^"\']+)["\']', text or "")
     return m.group(1) if m else None
 
 
@@ -43,14 +43,15 @@ def run_rows(page_text):
 
 def parse_run(page_text, name):
     rows = run_rows(page_text)
-    for t in rows:
+    hits = [t for t in rows if ("已完成" in t or "失败" in t)]
+    for t in hits:
         if name in t:
             m = re.search(r"(已完成|失败)\s*[—-]?\s*(.*)", t)
             return {"row": t[:600], "status": m.group(1) if m else "unknown",
                     "detail": m.group(2) if m else ""}
-    # 结果表不显示报表名时，退回最后一条数据行（表头/空行已滤掉）
-    if rows:
-        t = rows[-1]
+    # 结果表不显示报表名时，退回最后一条结果行
+    if hits:
+        t = hits[-1]
         m = re.search(r"(已完成|失败)\s*[—-]?\s*(.*)", t)
         return {"row": t[:600], "status": m.group(1) if m else "unknown",
                 "detail": m.group(2) if m else ""}
