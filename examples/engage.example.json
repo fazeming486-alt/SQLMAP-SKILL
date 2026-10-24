@@ -1,7 +1,9 @@
 {
   "name": "demo",
   "base_url": "https://target.example",
-  "scope": ["target.example"],
+  "scope": [
+    "target.example"
+  ],
   "rps": 1.5,
   "max_requests": 300,
   "output_dir": "runs/demo",
@@ -12,7 +14,10 @@
         "url": "/login",
         "csrf_url": "/login",
         "csrf_field": "_csrf",
-        "data": {"email": "buyer@example.test", "password": "change-me"},
+        "data": {
+          "email": "buyer@example.test",
+          "password": "change-me"
+        },
         "verify_url": "/buyer"
       }
     },
@@ -20,7 +25,10 @@
       "login": {
         "url": "/login",
         "csrf_url": "/login",
-        "data": {"email": "merchant@example.test", "password": "change-me"},
+        "data": {
+          "email": "merchant@example.test",
+          "password": "change-me"
+        },
         "verify_url": "/merchant"
       }
     },
@@ -28,28 +36,76 @@
       "cookie_jar": "cookies/admin.txt"
     }
   },
-  "modules": ["misconfig", "xss", "authz", "sqli", "upload"],
+  "modules": [
+    "misconfig",
+    "xss",
+    "authz",
+    "sqli",
+    "upload"
+  ],
   "options": {
     "xss_targets": [
-      {"url": "https://target.example/search?q=*", "role": "anon"}
+      {
+        "url": "https://target.example/search?q=*",
+        "role": "anon"
+      }
     ],
     "authz_resources": [
-      {"url": "/admin/orders", "allow": ["admin"], "deny": ["anon", "buyer", "merchant"],
-       "title": "运营后台越权"},
-      {"url": "/merchant/orders", "allow": ["merchant"], "deny": ["anon", "buyer", "admin"],
-       "title": "商家工作台越权"},
-      {"url": "/buyer/orders", "allow": ["buyer"], "deny": ["anon", "merchant", "admin"],
-       "title": "买家工作台越权"}
+      {
+        "url": "/admin/orders",
+        "allow": [
+          "admin"
+        ],
+        "deny": [
+          "anon",
+          "buyer",
+          "merchant"
+        ],
+        "title": "运营后台越权"
+      },
+      {
+        "url": "/merchant/orders",
+        "allow": [
+          "merchant"
+        ],
+        "deny": [
+          "anon",
+          "buyer",
+          "admin"
+        ],
+        "title": "商家工作台越权"
+      },
+      {
+        "url": "/buyer/orders",
+        "allow": [
+          "buyer"
+        ],
+        "deny": [
+          "anon",
+          "merchant",
+          "admin"
+        ],
+        "title": "买家工作台越权"
+      }
     ],
     "sqli_targets": [
-      {"url": "https://target.example/reports/export?from=2026-01-01&to=2026-12-31&dimension=*",
-       "role": "merchant", "context": "expr", "base": "category"}
+      {
+        "url": "https://target.example/reports/export?from=2026-01-01&to=2026-12-31&dimension=*",
+        "role": "merchant",
+        "context": "expr",
+        "base": "category"
+      }
     ],
     "ssrf_targets": [],
     "ssrf_callback": null,
-    "upload_pages": ["https://target.example/upload"],
+    "upload_pages": [
+      "https://target.example/upload"
+    ],
     "upload_test": false,
     "nuclei_rate": 10,
-    "nuclei_severity": "low,medium,high,critical"
+    "nuclei_severity": "low,medium,high,critical",
+    "export_role": "buyer",
+    "api_role": "buyer",
+    "export_create_path": "/exports"
   }
 }

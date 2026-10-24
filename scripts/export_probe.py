@@ -52,8 +52,9 @@ def parse_jobs(text):
 def run(ctx):
     store = ctx["store"]
     base = ctx["base_url"]
-    client = ctx["anon"] or ctx["clients"].get("anon")
     opts = ctx.get("options", {})
+    role = opts.get("export_role") or ("buyer" if "buyer" in ctx.get("clients", {}) else "anon")
+    client = ctx["clients"].get(role) or ctx["anon"] or ctx["clients"].get("anon")
     create_path = httpkit.normalize_path(opts.get("export_create_path", "/exports"))
     list_path = httpkit.normalize_path(opts.get("export_list_path", "/exports"))
     kind = opts.get("export_kind", "orders")

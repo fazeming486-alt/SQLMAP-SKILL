@@ -31,8 +31,9 @@ DEFAULT_PATHS = [
 def run(ctx):
     store = ctx["store"]
     base = ctx["base_url"]
-    client = ctx["anon"] or ctx["clients"].get("anon")
     opts = ctx.get("options", {})
+    role = opts.get("api_role") or "anon"
+    client = ctx["clients"].get(role) or ctx["anon"] or ctx["clients"].get("anon")
     paths = opts.get("api_paths") or DEFAULT_PATHS
     methods = opts.get("api_methods") or ["GET", "POST", "PATCH", "PUT"]
     rows = []
