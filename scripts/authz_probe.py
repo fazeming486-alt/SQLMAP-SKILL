@@ -49,7 +49,8 @@ def make_client(role_cfg, base_url, evidence_dir, rps=1.0, timeout=30):
         try:
             c.login(login.get("url"), login.get("data", {}),
                     csrf_url=login.get("csrf_url"), csrf_field=login.get("csrf_field", "_csrf"),
-                    method=login.get("method", "POST"), tag="login-" + role_cfg.get("name", "role"))
+                    method=login.get("method", "POST"), tag="login-" + role_cfg.get("name", "role"),
+                    totp_secret=login.get("totp_secret"))
         except Exception as e:
             print("WARN login failed for %s: %s" % (role_cfg.get("name", "role"), e))
     return c

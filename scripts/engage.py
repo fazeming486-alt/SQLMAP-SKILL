@@ -82,7 +82,8 @@ def build_clients(cfg, base_dir, evidence_root, budget, rps, timeout):
                              csrf_url=login.get("csrf_url"),
                              csrf_field=login.get("csrf_field", "_csrf"),
                              method=login.get("method", "POST"),
-                             tag="login-" + role)
+                             tag="login-" + role,
+                             totp_secret=login.get("totp_secret"))
             except Exception as e:
                 status[role] = {"login": "error", "error": str(e)}
                 clients[role] = client
@@ -167,6 +168,8 @@ def main():
     p.add_argument("--timeout", type=float, default=30)
     p.add_argument("--report", action="store_true", help="generate HTML report at the end")
     p.add_argument("--no-report", action="store_true")
+    p.add_argument("--strict-auth", action="store_true",
+                   help="任一非匿名角色登录失败则中止")
     args = p.parse_args()
 
     cfg = _load(args.config)
@@ -193,6 +196,8 @@ def main():
     stamp = time.strftime("%Y%m%d-%H%M%S")
     run_dir = cfg.get("output_dir") or os.path.join("runs", "%s-%s" % (cfg.get("name", "engagement"), stamp))
     run_dir = os.path.abspath(os.path.join(base_dir, run_dir)) if not os.path.isabs(run_dir) else run_dir
+    if os.path.exists(run_dir) and not cfg.get("overwrite"):
+        run_dir = run_dir + "-" + stamp
     evidence_root = os.path.join(run_dir, "raw")
 
     print("=== engagement: %s ===" % cfg.get("name"))
@@ -211,6 +216,14 @@ def main():
     os.makedirs(evidence_root, exist_ok=True)
     budget = httpkit.Budget(max_requests)
     clients, session_status = build_clients(cfg, base_dir, evidence_root, budget, rps, args.timeout)
+    failed_roles = [r for r, st in session_status.items()
+                    if r != "anon" and (st.get("login") == "error"
+                                       or st.get("status") in (301, 302, 303, 401, 403))]
+    if failed_roles:
+        print("WARN unauthenticated roles:", failed_roles)
+        if args.strict_auth or cfg.get("strict_auth"):
+            print("STOP: strict auth enabled")
+            return 2
     anon = clients.get("anon") or next(iter(clients.values()))
     store = FindingStore(os.path.join(run_dir, "findings.json"))
     ctx = {

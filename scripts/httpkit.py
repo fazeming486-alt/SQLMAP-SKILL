@@ -239,6 +239,8 @@ class HttpClient:
                 self.login(**self._login_kwargs)
                 r = self._request_once(method, url, data=data, json_body=json_body,
                                        headers=headers, allow_redirects=allow_redirects, tag=tag)
+            except (RateLimited, BudgetExceeded):
+                raise
             except Exception:
                 pass
         return r

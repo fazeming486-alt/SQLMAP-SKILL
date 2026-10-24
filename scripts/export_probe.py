@@ -61,6 +61,15 @@ def run(ctx):
     date_to = opts.get("export_to", "2026-10-24")
 
     page = client.get(create_path, tag="export-create-page")
+    if "登录工作台" in (page["text"] or "") or "/login" in (page["url"] or ""):
+        store.add(module="export", title="导出测试需要有效登录会话", severity="info",
+                  endpoint=base + create_path, method="GET", confidence="surface",
+                  evidence={"status": page["status"], "url": page["url"],
+                            "artifact": page.get("evidence")},
+                  impact="未登录时创建页会跳登录，无法测试导出授权。",
+                  remediation="提供买家/商家 cookie jar 或登录配置。",
+                  tags=["export", "session"])
+        return store.items
     csrf = extract_csrf(page["text"])
     if not csrf:
         print("export_probe: no CSRF on create page; check session")

@@ -79,6 +79,32 @@ def _first_data_row(text):
     return lines[1].split(",")[0].strip().strip('"')
 
 
+def _param_name(template, data):
+    for src in (template or "", data or ""):
+        m = re.search(r"([A-Za-z0-9_\[\].-]+)=([^&]*\*)", src)
+        if m:
+            return m.group(1).lower()
+    return ""
+
+
+def _expr_param(param):
+    return any(k in param for k in ("dimension", "order", "sort", "column", "field", "group", "select"))
+
+
+def _structured(resp):
+    ctype = (resp.get("headers") or {}).get("content-type", "").lower()
+    return "csv" in ctype or "json" in ctype
+
+
+def _reflected_in_chrome(text, marker):
+    # marker 只出现在 input value / title 里，通常是回显而非 SQL 数据
+    if re.search(r'value="[^"]*' + re.escape(marker), text or "", re.I):
+        return True
+    if re.search(r'<title>[^<]*' + re.escape(marker), text or "", re.I):
+        return True
+    return False
+
+
 def probe_sqli(client, template, data, store, method="GET", base="1", context="auto"):
     if "*" not in template and not (data and "*" in data):
         return None
@@ -114,12 +140,16 @@ def probe_sqli(client, template, data, store, method="GET", base="1", context="a
                 references=["WSTG-INPV-05", "OWASP SQL Injection Prevention Cheat Sheet"],
                 tags=["sqli", ctx],
             )
-    # expr 位点
-    if context in ("auto", "expr"):
+    # expr 位点：只对列名/表达式参数或结构化输出启用，避免把搜索回显当注入
+    param = _param_name(template, data)
+    if context == "expr" or (context == "auto" and (expr_param := _expr_param(param))):
         marker = "WPX" + str(random.randint(100000, 999999))
         m = _send(client, template, data, "(SELECT '%s')" % marker, "sqli-expr-marker", method)
         s = _send(client, template, data, "(SELECT 1)", "sqli-expr-scalar", method)
-        if m["status"] == 200 and marker in (m["text"] or ""):
+        structured = _structured(m)
+        reflected = _reflected_in_chrome(m["text"], marker)
+        if (m["status"] == 200 and marker in (m["text"] or "")
+                and not reflected and (structured or context == "expr")):
             return store.add(
                 module="sqli", title="列名/表达式 SQL 注入（报表导出）", severity="high",
                 endpoint=template, method=method, parameter="dimension/expr",

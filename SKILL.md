@@ -1,7 +1,7 @@
 ---
 name: web-pentest
 description: 授权 Web 渗透测试工作台（v4）：可编排的侦察 → 角色/会话 → 配置面 → XSS → 越权/IDOR → SQLi/表达式注入 → SSRF → 上传面 → 证据 → HTML 报告。内置 httpkit/findings/engage 内核，统一预算、限速、Cookie 轮换、证据与去重；可选 nuclei/httpx/katana 等外部工具适配。触发场景：Web 渗透、漏洞侦察、攻击面、角色矩阵、SQL 注入、列名注入、XSS、越权、IDOR、SSRF、上传、配置错误、业务逻辑，以及 DVWA/北岸/南岭/NEXA 等自有靶场。中英触发词：web pentest、渗透测试、侦察、攻击面、SQL注入、SQL injection、sqli、XSS、SSRF、IDOR、越权、文件上传、misconfiguration、business logic、security report。
-version: 4.1.0
+version: 4.1.1
 display_name: Web 渗透测试工作台
 argument-hint: <目标 URL / engage.json / 档案名，如 dvwa / northbank>
 ---
@@ -201,7 +201,9 @@ python scripts/tool_adapters.py --run httpx --target https://host
 | `dimension=xxx'` 500，`(SELECT 1)` 返回 1 | 列名/表达式注入 | `sqli_probe --context expr`；读 information_schema |
 | 报表导出只有 500/空 CSV | 输入截断/限速/错误被吞 | 换短载荷；问应用上限；看 raw 证据 |
 | 工具没输出 | 未安装/参数不兼容 | `tool_adapters.py --list`；看 stderr |
-| 登录 429 | 登录端点限速（不是封号） | 停手冷却；复用现有 session；不要循环重登 |
+| 登录 429 | 登录端点限速（不是封号） | 停手冷却；复用现有 session；不要循环重登；`--strict-auth` 防止未认证跑出假阴性 |
+| 模块全 0 但 `summary.sessions` 有 login error | 会话没登上，结果不可信 | 先修会话；不要把匿名负例当结论 |
+| SQLi expr 的 marker 只出现在 input/title | 搜索回显，不是 SQL 数据 | 只认 CSV/JSON 的结构化输出；或显式 `--context expr` |
 | 导出签名 `exp+1` 仍 200 | 签名不校验过期 | 记录 high；报告里给 exp/sig 证据 |
 | 导出下载换 job id 200 | 签名未绑定任务/缺租户校验 | 对象级授权缺失；记录 job/tenant |
 | 合作方 API 401/405 | 路由存在但需要凭据/方法不对 | 405 看 Allow；401 找 API key/Bearer，不要爆破 |

@@ -55,6 +55,15 @@ def run(ctx):
         r = client.get(authorize + "?" + q, tag="oidc-" + name)
         loc = r["headers"].get("location", "")
         body = r["text"] or ""
+        if "登录工作台" in body or "/login" in (r["url"] or ""):
+            store.add(module="oidc", title="OIDC 测试需要有效登录会话", severity="info",
+                      endpoint=issuer + authorize, method="GET", confidence="surface",
+                      evidence={"status": r["status"], "url": r["url"],
+                                "artifact": r.get("evidence")},
+                      impact="未登录时 authorize 会先跳登录，无法判断 redirect_uri。",
+                      remediation="提供该角色的 cookie jar 或登录配置。",
+                      tags=["oidc", "session"])
+            return store.items
         leaked = "code=" in loc and "evil.example" in loc
         accepted = r["status"] in (302, 303) and loc and "login" not in loc
         if leaked:
