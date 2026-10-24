@@ -42,11 +42,18 @@ def run_rows(page_text):
 
 
 def parse_run(page_text, name):
-    for t in run_rows(page_text):
+    rows = run_rows(page_text)
+    for t in rows:
         if name in t:
             m = re.search(r"(已完成|失败)\s*[—-]?\s*(.*)", t)
             return {"row": t[:600], "status": m.group(1) if m else "unknown",
                     "detail": m.group(2) if m else ""}
+    # 结果表不显示报表名时，退回最后一条数据行（表头/空行已滤掉）
+    if rows:
+        t = rows[-1]
+        m = re.search(r"(已完成|失败)\s*[—-]?\s*(.*)", t)
+        return {"row": t[:600], "status": m.group(1) if m else "unknown",
+                "detail": m.group(2) if m else ""}
     return None
 
 
@@ -70,12 +77,29 @@ def create_report(c, args, name, status):
     r = c.post(args.create_path, data=data, headers={"Referer": args.base + args.list_path},
                tag="report-create-" + name)
     after = c.get(args.list_path, tag="report-list-after-create")
-    ids = [int(i) for i in re.findall(r"/reports/(\d+)/run", after["text"])]
-    # 也兼容 /supplier/reports/...
-    ids += [int(i) for i in re.findall(r"/reports/(\d+)/run", after["text"])]
-    ids = sorted(set(ids))
+    ids = sorted({int(i) for i in re.findall(r"/reports/(\d+)/run", after["text"])})
     return {"create_status": r["status"], "create_url": r["url"], "ids": ids,
             "page": after["text"]}
+
+
+COUNT_RE = re.compile(r"(\d+)\s*(?:行|组|rows?)", re.I)
+ERR_RE = re.compile(r"(SyntaxError|OperationalError|GroupingError|SQLSTATE|"
+                    r"Unknown column|syntax error|near \"[^\"]*\")", re.I)
+
+
+def judge(line, counts):
+    """把一个结果行转成 (count, verdict)。counts 是本次所有已观测行数。"""
+    m = COUNT_RE.search(line or "")
+    count = int(m.group(1)) if m else None
+    err = ERR_RE.search(line or "")
+    if err:
+        return {"count": count, "verdict": "error-based", "error": err.group(1)}
+    if count is not None and len(counts) >= 2:
+        lo, hi = min(counts), max(counts)
+        if hi >= lo * 2 and hi > lo + 3:
+            verdict = "boolean-diff" if count == hi else "boolean-control"
+            return {"count": count, "verdict": verdict, "min": lo, "max": hi}
+    return {"count": count, "verdict": "inconclusive"}
 
 
 def run_report(c, args, rid):
@@ -133,7 +157,7 @@ def main():
         store.save()
         return
 
-    baseline_rows = None
+    outcomes = []
     for i, payload in enumerate(args.payload, 1):
         name = "%s-%d" % (args.name_prefix, i)
         cr = create_report(c, args, name, payload)
@@ -148,17 +172,40 @@ def main():
         rr = run_report(c, args, rid)
         page = rr.get("page", "")
         parsed = parse_run(page, name) or {}
-        m = re.search(r"(\d+)", parsed.get("row", ""))
-        # 结果行数：优先找“已完成 N”；否则看错误
         line = parsed.get("row", "")
         print("PAYLOAD", i, "report", rid, "|", parsed.get("status"), "|", line[:260])
-        store.add(module="report", title="保存报表二阶注入测试", severity="info",
+        outcomes.append({"index": i, "payload": payload, "report_id": rid,
+                         "run_status": rr.get("run_status"), "line": line[:600]})
+
+    counts = [judge(o["line"], [])["count"] for o in outcomes]
+    counts = [n for n in counts if n is not None]
+    confirmed = []
+    for o in outcomes:
+        verdict = judge(o["line"], counts)
+        high = verdict["verdict"] in ("error-based", "boolean-diff")
+        if high:
+            confirmed.append(o)
+        store.add(module="report",
+                  title="保存报表二阶注入：%s" % verdict["verdict"],
+                  severity="high" if high else "info",
                   endpoint=args.base + args.create_path, method="POST",
-                  confidence="needs-review",
-                  evidence={"payload": payload, "report_id": rid,
-                            "run_status": rr.get("run_status"), "result": line[:600]},
-                  impact="按结果是否随布尔/报错变化确认二阶注入。", remediation="—",
+                  confidence="confirmed" if high else "needs-review",
+                  evidence={"payload": o["payload"], "report_id": o["report_id"],
+                            "run_status": o["run_status"], "verdict": verdict,
+                            "result": o["line"]},
+                  impact=("保存时未拦截、重放时拼接执行，可读跨租户/跨状态数据。"
+                          if high else "结果未见行数差异或报错；换布尔/报错载荷再试。"),
+                  remediation="筛选器存储前做类型/枚举校验；重放时使用参数化查询；报表查询加租户过滤。",
                   tags=["report", "second-order", "sqli"])
+    if confirmed:
+        store.add(module="report", title="保存报表二阶注入（已确认）", severity="high",
+                  endpoint=args.base + args.create_path, method="POST", confidence="confirmed",
+                  evidence={"payloads": [o["payload"] for o in confirmed],
+                            "counts": counts,
+                            "reports": [o["report_id"] for o in confirmed]},
+                  impact="同一筛选器的布尔/报错载荷在重放阶段产生显著行数差异或 SQL 报错。",
+                  remediation="同上报；修复后重放同一批报表验证行数回落。",
+                  tags=["report", "second-order", "sqli", "confirmed"])
     store.save()
     print(json.dumps(store.summary(), ensure_ascii=False))
     print("findings:", os.path.abspath(args.out))

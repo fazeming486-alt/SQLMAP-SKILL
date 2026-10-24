@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.2.0）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.2.1）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -52,7 +52,7 @@ python scripts/report.py --run-dir runs/demo
 | Webhook 重定向 SSRF | 可用 | `webhook_probe.py` | `references/ssrf-playbook.md` |
 | 外部工具 | 可用（按安装） | `tool_adapters.py` | `references/tooling.md` |
 | HTML 报告 | 可用 | `report.py`、`html_report.py` | `references/reporting.md` |
-| DOM XSS / 业务逻辑 | 手工 | — | `references/xss-playbook.md` / `methodology.md` |
+| DOM XSS / 业务逻辑 | 手工 | — | `references/xss-playbook.md` / `logic-playbook.md` |
 
 ## 内核
 
@@ -102,6 +102,8 @@ python scripts/report.py --run-dir runs/demo
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.2.1**：`report_probe.py` 增加布尔/报错判据（行数差、SQL 报错、控制组），`webhook_probe.py` 支持复用端点与 302→200 判据；新增 `references/logic-playbook.md`（业务逻辑/竞争/幂等/账本）；XSS playbook 补旧版原文渲染；清理仓库自检产物。
 >
 > **v4.2.0**：新增 `report_probe.py`（保存报表二阶注入：创建→运行→结果/报错对照）与 `webhook_probe.py`（首跳合法、投递跳内网的 SSRF 取证）；OBSIDIAN 实测 RPT-02/HOOK-03 路径。
 >

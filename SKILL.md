@@ -1,7 +1,7 @@
 ---
 name: web-pentest
 description: 授权 Web 渗透测试工作台（v4）：可编排的侦察 → 角色/会话 → 配置面 → XSS → 越权/IDOR → SQLi/表达式注入 → SSRF → 上传面 → 证据 → HTML 报告。内置 httpkit/findings/engage 内核，统一预算、限速、Cookie 轮换、证据与去重；可选 nuclei/httpx/katana 等外部工具适配。触发场景：Web 渗透、漏洞侦察、攻击面、角色矩阵、SQL 注入、列名注入、XSS、越权、IDOR、SSRF、上传、配置错误、业务逻辑，以及 DVWA/北岸/南岭/NEXA 等自有靶场。中英触发词：web pentest、渗透测试、侦察、攻击面、SQL注入、SQL injection、sqli、XSS、SSRF、IDOR、越权、文件上传、misconfiguration、business logic、security report。
-version: 4.2.0
+version: 4.2.1
 display_name: Web 渗透测试工作台
 argument-hint: <目标 URL / engage.json / 档案名，如 dvwa / northbank>
 ---
@@ -226,6 +226,7 @@ python scripts/tool_adapters.py --run httpx --target https://host
 - `references/export-playbook.md` —— 异步导出、签名下载、对象级授权。
 - `references/api-playbook.md` —— 无文档 API 的 401/405/404 面与批量赋值。
 - `references/oidc-playbook.md` —— OIDC/OAuth 回调地址与账号接管。
+- `references/logic-playbook.md` —— 业务逻辑与竞争条件（退款/额度/幂等/账本）。
 - `references/misconfig-playbook.md` —— 头/Cookie/CORS/敏感路径。
 - `references/tooling.md` —— 外部工具适配与安全参数。
 - `references/reporting.md` —— findings 模型、严重度、脱敏、报告结构。

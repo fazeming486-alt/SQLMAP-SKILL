@@ -1,3 +1,0 @@
-URL: http://127.0.0.1:8899/inval?id=1%20AND%201%3D2
-
-ROWS: 10 | product electronics-113 | total 10
