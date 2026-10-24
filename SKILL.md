@@ -1,7 +1,7 @@
 ---
 name: web-pentest
 description: 授权 Web 渗透测试工作台（v4）：可编排的侦察 → 角色/会话 → 配置面 → XSS → 越权/IDOR → SQLi/表达式注入 → SSRF → 上传面 → 证据 → HTML 报告。内置 httpkit/findings/engage 内核，统一预算、限速、Cookie 轮换、证据与去重；可选 nuclei/httpx/katana 等外部工具适配。触发场景：Web 渗透、漏洞侦察、攻击面、角色矩阵、SQL 注入、列名注入、XSS、越权、IDOR、SSRF、上传、配置错误、业务逻辑，以及 DVWA/北岸/南岭/NEXA 等自有靶场。中英触发词：web pentest、渗透测试、侦察、攻击面、SQL注入、SQL injection、sqli、XSS、SSRF、IDOR、越权、文件上传、misconfiguration、business logic、security report。
-version: 4.0.1
+version: 4.1.0
 display_name: Web 渗透测试工作台
 argument-hint: <目标 URL / engage.json / 档案名，如 dvwa / northbank>
 ---
@@ -57,6 +57,9 @@ python scripts/authz_probe.py --config authz.json --rps 1.5
 python scripts/sqli_probe.py --target "https://host/export?dimension=*" --context expr
 python scripts/ssrf_probe.py --target "https://host/fetch?url=*" --callback https://your-callback
 python scripts/upload_probe.py --page https://host/upload
+python scripts/export_probe.py --base https://host --cookie-jar buyer.txt
+python scripts/api_probe.py --base https://host --route /partner/v1/profile
+python scripts/oidc_probe.py --issuer https://host --client-id <id> --redirect-uri https://host/oidc/callback
 python scripts/report.py --run-dir runs/demo
 ```
 
@@ -97,9 +100,10 @@ python scripts/report.py --run-dir runs/demo
 }
 ```
 
-**会话两个坑**：
+**会话三个坑**：
 - 登录 POST 通常要 `Referer` 与 `_csrf`；`httpkit.login()` 已带 Referer。缺 Referer 会 403「安全校验未通过」。
-- 会话会轮换/过期；用 `cookie_jar`，不要在多模块长跑里复用静态 `--cookie`。
+- 会话会轮换/过期；用 `cookie_jar`，不要在多模块长跑里复用静态 `--cookie`。`httpkit` 检测到被重定向到 `/login` 会自动重登一次。
+- 登录也会限速（429）。不要把“重登”当无限重试；冷却后再试。MFA 账号在 `login.totp_secret` 配置 base32 密钥，`httpkit` 会自动算 TOTP。
 
 ## 3. 模块路由
 
@@ -112,6 +116,9 @@ python scripts/report.py --run-dir runs/demo
 | sqli | 参数含 q/id/sort/dimension/报表导出 | `sqli_probe.py` | `sqli-playbook.md` | 3–8 |
 | ssrf | URL/回调/图片/代理类参数 | `ssrf_probe.py` | `ssrf-playbook.md` | 1–5/参数 |
 | upload | 有 multipart 表单 | `upload_probe.py` | `upload-playbook.md` | 1/page |
+| export | 异步导出/签名下载/任务 ID | `export_probe.py` | `export-playbook.md` | 3–10 |
+| api | 合作方/移动 API，无导航无文档 | `api_probe.py` | `api-playbook.md` | 路由×方法 |
+| oidc | OIDC/OAuth 登录、回调地址 | `oidc_probe.py` | `oidc-playbook.md` | 8–12 |
 | nuclei | 想用社区模板补盲 | `tool_adapters.py` | `tooling.md` | 由模板决定 |
 
 **决策原则**：先做“能直接解释的少量证据”，再上工具。sqlmap/nuclei 是放大器，不是第一步。
@@ -194,6 +201,12 @@ python scripts/tool_adapters.py --run httpx --target https://host
 | `dimension=xxx'` 500，`(SELECT 1)` 返回 1 | 列名/表达式注入 | `sqli_probe --context expr`；读 information_schema |
 | 报表导出只有 500/空 CSV | 输入截断/限速/错误被吞 | 换短载荷；问应用上限；看 raw 证据 |
 | 工具没输出 | 未安装/参数不兼容 | `tool_adapters.py --list`；看 stderr |
+| 登录 429 | 登录端点限速（不是封号） | 停手冷却；复用现有 session；不要循环重登 |
+| 导出签名 `exp+1` 仍 200 | 签名不校验过期 | 记录 high；报告里给 exp/sig 证据 |
+| 导出下载换 job id 200 | 签名未绑定任务/缺租户校验 | 对象级授权缺失；记录 job/tenant |
+| 合作方 API 401/405 | 路由存在但需要凭据/方法不对 | 405 看 Allow；401 找 API key/Bearer，不要爆破 |
+| OIDC 400「客户端无效」 | client_id 不对/未提供 | 从凭据/前端配置取 client_id；不要猜 |
+| OIDC 变体 302 到相似域名 | redirect_uri 前缀匹配 | 记录 critical；精确匹配修复 |
 
 ## References
 
@@ -204,6 +217,9 @@ python scripts/tool_adapters.py --run httpx --target https://host
 - `references/authz-playbook.md` —— 角色矩阵/IDOR/越权。
 - `references/ssrf-playbook.md` —— 带外回调/内网探测。
 - `references/upload-playbook.md` —— 上传面与安全测试。
+- `references/export-playbook.md` —— 异步导出、签名下载、对象级授权。
+- `references/api-playbook.md` —— 无文档 API 的 401/405/404 面与批量赋值。
+- `references/oidc-playbook.md` —— OIDC/OAuth 回调地址与账号接管。
 - `references/misconfig-playbook.md` —— 头/Cookie/CORS/敏感路径。
 - `references/tooling.md` —— 外部工具适配与安全参数。
 - `references/reporting.md` —— findings 模型、严重度、脱敏、报告结构。

@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import httpkit
 from findings import FindingStore
 
-MODULE_ORDER = ["recon", "misconfig", "xss", "authz", "sqli", "ssrf", "upload", "nuclei"]
+MODULE_ORDER = ["recon", "misconfig", "xss", "authz", "sqli", "ssrf", "upload", "export", "api", "oidc", "nuclei"]
 
 
 def _redact_obj(o):
@@ -137,6 +137,15 @@ def run_module(name, ctx):
     if name == "upload":
         import upload_probe
         return upload_probe.run(ctx)
+    if name == "export":
+        import export_probe
+        return export_probe.run(ctx)
+    if name == "api":
+        import api_probe
+        return api_probe.run(ctx)
+    if name == "oidc":
+        import oidc_probe
+        return oidc_probe.run(ctx)
     if name == "nuclei":
         import tool_adapters
         return tool_adapters.run_nuclei(ctx["base_url"], ctx["store"],

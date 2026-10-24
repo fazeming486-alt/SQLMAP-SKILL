@@ -1,6 +1,6 @@
 # WEB-PENTEST-SKILL
 
-授权 Web 渗透测试工作台（v4.0.1）。不是 sqlmap 外壳，而是一套可编排的流水线：
+授权 Web 渗透测试工作台（v4.1.0）。不是 sqlmap 外壳，而是一套可编排的流水线：
 
 ```
 scope/session → recon → role matrix → baseline → modules → verify → findings → report
@@ -28,6 +28,9 @@ python scripts/authz_probe.py --config authz.json
 python scripts/sqli_probe.py --target "https://host/export?dimension=*" --context expr
 python scripts/ssrf_probe.py --target "https://host/fetch?url=*" --callback https://your-callback
 python scripts/upload_probe.py --page https://host/upload
+python scripts/export_probe.py --base https://host --cookie-jar buyer.txt
+python scripts/api_probe.py --base https://host --route /partner/v1/profile
+python scripts/oidc_probe.py --issuer https://host --client-id <id> --redirect-uri https://host/oidc/callback
 python scripts/report.py --run-dir runs/demo
 ```
 
@@ -42,6 +45,9 @@ python scripts/report.py --run-dir runs/demo
 | SQLi/表达式注入 | 可用 | `sqli_probe.py`、`sqlmap_run.py` | `references/sqli-playbook.md` |
 | SSRF 带外 | beta | `ssrf_probe.py` | `references/ssrf-playbook.md` |
 | 上传面 | 可用（默认只盘面） | `upload_probe.py` | `references/upload-playbook.md` |
+| 异步导出/签名下载 | 可用 | `export_probe.py` | `references/export-playbook.md` |
+| 合作方/移动 API 面 | 可用 | `api_probe.py` | `references/api-playbook.md` |
+| OIDC/OAuth 回调绕过 | 可用 | `oidc_probe.py` | `references/oidc-playbook.md` |
 | 外部工具 | 可用（按安装） | `tool_adapters.py` | `references/tooling.md` |
 | HTML 报告 | 可用 | `report.py`、`html_report.py` | `references/reporting.md` |
 | DOM XSS / 业务逻辑 | 手工 | — | `references/xss-playbook.md` / `methodology.md` |
@@ -94,6 +100,8 @@ python scripts/report.py --run-dir runs/demo
 > v2.2 HTML 交互报告；v2.3 recon；v2.4 TLS 中继；v2.5 侦察升级；v2.6 成对取证；v2.7 表达式/列名注入。
 >
 > **v3.0 改名与定位**：`SQLMAP-SKILL` → `WEB-PENTEST-SKILL`；SQLi 成为第一个深度模块。
+>
+> **v4.1.0**：新增异步导出/签名下载（`export_probe.py`）、无文档 API 面（`api_probe.py`）、OIDC 回调绕过（`oidc_probe.py`）；`httpkit` 支持会话失效自动重登与 TOTP MFA；补 MSYS 路径参数转换。OBSIDIAN 实战：短会话、登录 429、partner API 401/405、OIDC 客户端无效。
 >
 > **v4.0.1**：登录失败不中断角色矩阵；修正 httpx 同名二进制识别。
 >
